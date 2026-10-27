@@ -31,7 +31,7 @@ jobs:
           $dir = "dist/日历待办-v$ver"
           New-Item -ItemType Directory -Path $dir -Force | Out-Null
           Copy-Item out/TodoCalendar.exe $dir
-          (Get-Content tools/先看这个.txt -Raw).Replace('@VERSION@', $ver) |
+          (Get-Content tools/先看这个.txt -Raw -Encoding UTF8).Replace('@VERSION@', $ver) |
             Set-Content "$dir/先看这个.txt" -Encoding utf8
           Copy-Item docs/使用说明.txt "$dir/更新记录.txt"
           Compress-Archive -Path $dir -DestinationPath "dist/TodoCalendar-v$ver-win64.zip"

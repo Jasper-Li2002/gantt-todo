@@ -1,6 +1,8 @@
 ﻿param([switch]$SkipSelfContained)
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'   # 关掉 Compress-Archive 的进度条刷屏
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
@@ -20,17 +22,16 @@ if (-not $SkipSelfContained) {
 }
 
 Write-Host '3/3 打包'
+# 不用 Remove-Item：某些环境会拦截删除。目录存在就复用，文件用 -Force 覆盖
 $out = Join-Path $root "dist\日历待办-v$ver"
-if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Path $out -Force | Out-Null
 
-Copy-Item 'release\sc\TodoCalendar.exe' $out
-(Get-Content 'tools\先看这个.txt' -Raw).Replace('@VERSION@', $ver) | Set-Content (Join-Path $out '先看这个.txt') -Encoding utf8
+Copy-Item 'release\sc\TodoCalendar.exe' $out -Force
+(Get-Content 'tools\先看这个.txt' -Raw -Encoding UTF8).Replace('@VERSION@', $ver) | Set-Content (Join-Path $out '先看这个.txt') -Encoding utf8
 Copy-Item 'docs\使用说明.txt' (Join-Path $out '更新记录.txt')
 
 $zip = Join-Path $root "dist\日历待办-v$ver-win64.zip"
-if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal
+Compress-Archive -Path $out -DestinationPath $zip -CompressionLevel Optimal -Force
 
 $h = (Get-FileHash $zip -Algorithm SHA256).Hash
 $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
