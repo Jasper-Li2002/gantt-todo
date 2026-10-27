@@ -11,8 +11,8 @@
   <AssemblyTitle>日历待办</AssemblyTitle>
   <Product>日历待办 · 甘特视图</Product>
   <Company>Jasper</Company>
-  <Version>2.6.2</Version>
-  <FileVersion>2.6.2.0</FileVersion>
+  <Version>2.6.3</Version>
+  <FileVersion>2.6.3.0</FileVersion>
     <ApplicationIcon>build\icon.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>

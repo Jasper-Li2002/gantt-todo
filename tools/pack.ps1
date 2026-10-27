@@ -15,17 +15,17 @@ $ver = [regex]::Match((Get-Content $csproj -Raw), '<Version>([^<]+)</Version>').
 if (-not $ver) { throw '读不到版本号' }
 Write-Host "版本 v$ver" -ForegroundColor Cyan
 
-Write-Host '1/4 编译自用版（框架依赖）'
+Write-Host '1/5 编译自用版（框架依赖）'
 dotnet publish winapp\TodoCalendar.csproj -c Release -o release\fd | Out-Null
 
-Write-Host '2/4 编译分发包（自带运行时，单文件）'
+Write-Host '2/5 编译分发包（自带运行时，单文件）'
 if (-not $SkipSelfContained) {
   dotnet publish winapp\TodoCalendar.csproj -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true -p:DebugType=none -o release\sc | Out-Null
 }
 
-Write-Host '3/4 打包'
+Write-Host '3/5 打包'
 # 不用 Remove-Item：某些环境会拦截删除。目录存在就复用，文件用 -Force 覆盖
 $out = Join-Path $root "dist\日历待办-v$ver"
 New-Item -ItemType Directory -Path $out -Force | Out-Null
@@ -43,9 +43,9 @@ $mb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 
 # ---------- 部署到本机安装目录（以后更新只认这一个位置） ----------
 if ($NoDeploy) {
-  Write-Host '4/4 跳过部署（-NoDeploy）'
+  Write-Host '4/5 跳过部署（-NoDeploy）'
 } else {
-  Write-Host "4/4 部署到 $InstallDir"
+  Write-Host "4/5 部署到 $InstallDir"
 
   $srcExe = Join-Path $root 'release\sc\TodoCalendar.exe'
   if (-not (Test-Path $srcExe)) { $srcExe = Join-Path $root 'release\fd\TodoCalendar.exe' }
@@ -81,6 +81,40 @@ if ($NoDeploy) {
 
   if ($running.Count -gt 0) { Start-Process $target }
   Write-Host "  · 已部署 $target（$([math]::Round((Get-Item $target).Length / 1MB, 1)) MB）" -ForegroundColor Green
+}
+
+# ---------- 清理 dist：只保留最近两个版本 ----------
+# 每个版本是 42MB 的 zip + 47MB 的解压目录，攒几个就上百兆。
+# 源码在 git 里、历史的还躺在 GitHub Release 上，本地留最近两个够回退就行。
+function Get-VerKey($name) {
+  $m = [regex]::Match($name, 'v(\d+)\.(\d+)\.(\d+)')
+  if (-not $m.Success) { return $null }
+  '{0}.{1}.{2}' -f $m.Groups[1].Value, $m.Groups[2].Value, $m.Groups[3].Value
+}
+
+$dist = Join-Path $root 'dist'
+$items = @()
+Get-ChildItem $dist -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+  $k = Get-VerKey $_.Name
+  if ($k) { $items += [pscustomobject]@{ Key = $k; Path = $_.FullName } }
+}
+Get-ChildItem $dist -File -Filter '*.zip' -ErrorAction SilentlyContinue | ForEach-Object {
+  $k = Get-VerKey $_.Name
+  if ($k) { $items += [pscustomobject]@{ Key = $k; Path = $_.FullName } }
+}
+
+$keepVer = @($items | Sort-Object { [version]$_.Key } -Descending |
+  Select-Object -ExpandProperty Key -Unique | Select-Object -First 2)
+$drop = @($items | Where-Object { $keepVer -notcontains $_.Key })
+
+if ($drop.Count) {
+  Write-Host ("5/5 清理 dist：保留 " + ($keepVer -join ' / ') + "，删除 $($drop.Count) 项旧产物")
+  foreach ($it in $drop) {
+    try { Remove-Item $it.Path -Recurse -Force -ErrorAction Stop }
+    catch { Write-Host ("  · 删不掉（可能被占用）：" + (Split-Path $it.Path -Leaf)) -ForegroundColor Yellow }
+  }
+} else {
+  Write-Host '5/5 dist 已只剩最近两个版本，无需清理'
 }
 
 Write-Host ''

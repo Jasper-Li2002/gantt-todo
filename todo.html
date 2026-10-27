@@ -433,6 +433,18 @@
   body.dark .bar[data-c="3"]{background:linear-gradient(90deg,#a992ea 0 3px,#271f3a 3px) !important;color:#bda6f0 !important;box-shadow:inset 0 0 0 1px rgba(169,146,234,.16) !important;}
   body.dark .bar[data-c="4"]{background:linear-gradient(90deg,#93a3b4 0 3px,#232830 3px) !important;color:#a9b6c4 !important;box-shadow:inset 0 0 0 1px rgba(147,163,180,.16) !important;}
   body.dark .bar[data-c="5"]{background:linear-gradient(90deg,#e08a63 0 3px,#2e201a 3px) !important;color:#f0a080 !important;box-shadow:inset 0 0 0 1px rgba(224,138,99,.16) !important;}
+  body.dark .bar[data-c="6"]{background:linear-gradient(90deg,#ff7b7b 0 3px,#2b1a1c 3px) !important;color:#ff9d9d !important;box-shadow:inset 0 0 0 1px rgba(255,123,123,.16) !important;}
+  body.dark .bar[data-c="7"]{background:linear-gradient(90deg,#5fd3a2 0 3px,#16291f 3px) !important;color:#7ee0b4 !important;box-shadow:inset 0 0 0 1px rgba(95,211,162,.16) !important;}
+  body.dark .bar[data-c="8"]{background:linear-gradient(90deg,#6bb6f0 0 3px,#16233a 3px) !important;color:#8cc8f5 !important;box-shadow:inset 0 0 0 1px rgba(107,182,240,.16) !important;}
+  body.dark .bar[data-c="9"]{background:linear-gradient(90deg,#f78bab 0 3px,#2e1a24 3px) !important;color:#f9a8c0 !important;box-shadow:inset 0 0 0 1px rgba(247,139,171,.16) !important;}
+  body.dark .bar[data-c="10"]{background:linear-gradient(90deg,#a8d84a 0 3px,#22280f 3px) !important;color:#c3e877 !important;box-shadow:inset 0 0 0 1px rgba(168,216,74,.16) !important;}
+  body.dark .bar[data-c="11"]{background:linear-gradient(90deg,#d18a63 0 3px,#2a1f18 3px) !important;color:#e0a884 !important;box-shadow:inset 0 0 0 1px rgba(209,138,99,.16) !important;}
+  /* 自定义色：底色/文字色从 --bd 现算，任意颜色都能落在深色主题里 */
+  body.dark .bar[data-c="x"]{
+    background:linear-gradient(90deg,color-mix(in srgb,var(--bd) 78%,#ffffff) 0 3px,color-mix(in srgb,var(--bd) 16%,#1b1f28) 3px) !important;
+    color:color-mix(in srgb,var(--bd) 45%,#ffffff) !important;
+    box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bd) 22%,transparent) !important;
+  }
   .bar.out{animation:barOut .16s ease forwards;}
   @keyframes barOut{to{opacity:0;transform:scale(.94);}}
 
@@ -461,6 +473,12 @@
     background:rgba(28,32,46,.95);color:#fff;white-space:nowrap;
     box-shadow:0 8px 22px rgba(0,0,0,.3);
   }
+  /* 上下拖动调顺序时，指示"松手会插到这里" */
+  .drop-line{
+    position:fixed;height:2px;border-radius:1px;pointer-events:none;z-index:9998;
+    background:var(--accent);box-shadow:0 0 0 3px rgba(75,87,210,.18);
+  }
+  body.dark .drop-line{box-shadow:0 0 0 3px rgba(143,166,255,.22);}
   .deps{position:absolute;left:0;top:0;pointer-events:none;z-index:4;overflow:visible;}
   .cal-empty{
     position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
@@ -594,9 +612,16 @@
   .field textarea{resize:vertical;min-height:56px;}
   .row2{display:flex;gap:9px;}
   .row2 .field{flex:1;}
-  .swatches{display:flex;gap:7px;}
-  .swatch{width:27px;height:27px;border-radius:8px;cursor:pointer;border:2px solid transparent;transition:.14s;}
+  .swatches{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+  .swatch{
+    position:relative;width:27px;height:27px;border-radius:8px;cursor:pointer;
+    border:2px solid transparent;transition:.14s;background:var(--panel);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:800;color:var(--muted);line-height:1;
+  }
   .swatch.on{border-color:var(--text);transform:scale(1.06);}
+  .swatch.custom{box-shadow:inset 0 0 0 1.5px var(--line2);}
+  .swatch.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;}
   .progress-row{display:flex;align-items:center;gap:9px;}
   .progress-row input[type=range]{flex:1;accent-color:var(--accent);}
   .progress-val{font-size:12px;font-weight:700;min-width:38px;text-align:right;color:var(--accent);font-variant-numeric:tabular-nums;}
@@ -1185,14 +1210,65 @@
   /* 方案 D：紫 / 蓝 / 青 / 琥珀 —— 色相间隔 40° 以上，无粉色，深浅两套主题都立得住。
      下标与阶段绑定：0=阶段3蓝 1=阶段4青 2=阶段5琥珀 3=阶段2紫 4=杂项灰蓝 5=杂项砖红。
      颜色存的是下标不是色值，换这套不需要迁移任何数据。 */
+  /* 常用色板。前 6 个的顺序绝对不能动——旧任务里 color 存的是这里的下标。
+     任务的 color 既可以是下标（0~11），也可以是 '#rrggbb'（用户自己调的色）。 */
   var PALETTE = [
-    { bg: '#eaeefd', bd: '#4361ee', tx: '#3247b8' },
-    { bg: '#e4f6f3', bd: '#12a594', tx: '#0b7a6d' },
-    { bg: '#fef4e0', bd: '#f59f00', tx: '#a86c00' },
-    { bg: '#ebe9fb', bd: '#7048e8', tx: '#5232b8' },
-    { bg: '#eef1f4', bd: '#6b7a8c', tx: '#4a5766' },
-    { bg: '#fdeee8', bd: '#c2410c', tx: '#8f3110' }
+    { bg: '#eaeefd', bd: '#4361ee', tx: '#3247b8', name: '蓝' },
+    { bg: '#e4f6f3', bd: '#12a594', tx: '#0b7a6d', name: '青' },
+    { bg: '#fef4e0', bd: '#f59f00', tx: '#a86c00', name: '橙' },
+    { bg: '#ebe9fb', bd: '#7048e8', tx: '#5232b8', name: '紫' },
+    { bg: '#eef1f4', bd: '#6b7a8c', tx: '#4a5766', name: '灰' },
+    { bg: '#fdeee8', bd: '#c2410c', tx: '#8f3110', name: '赭' },
+    { bg: '#ffe9ec', bd: '#e03131', tx: '#a81f1f', name: '红' },
+    { bg: '#e7f6ec', bd: '#2fa06a', tx: '#1d7549', name: '绿' },
+    { bg: '#e6f2fd', bd: '#1c7ed6', tx: '#145fa8', name: '天蓝' },
+    { bg: '#fdebf3', bd: '#e64980', tx: '#b32a5e', name: '粉' },
+    { bg: '#f3f8e3', bd: '#74b816', tx: '#527f0f', name: '黄绿' },
+    { bg: '#f6f0e6', bd: '#a0522d', tx: '#783d22', name: '棕' }
   ];
+  var HIGH_COLOR = 6;   // 高优先级默认落到"红"这一格
+
+  /* ---- 颜色工具：自定义色按同一套规则派生出浅底 / 深字，保证和预设色观感一致 ---- */
+  function hexRgb(h) {
+    h = String(h).replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return [parseInt(h.slice(0, 2), 16) || 0, parseInt(h.slice(2, 4), 16) || 0, parseInt(h.slice(4, 6), 16) || 0];
+  }
+  function rgbHex(r, g, b) {
+    return '#' + [r, g, b].map(function (v) {
+      v = Math.round(Math.max(0, Math.min(255, v)));
+      return ('0' + v.toString(16)).slice(-2);
+    }).join('');
+  }
+  function mixHex(a, b, t) {
+    var A = hexRgb(a), B = hexRgb(b);
+    return rgbHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
+  }
+  function isHexColor(c) { return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c); }
+  /* 下标则返回 0~11，自定义色返回 null */
+  function palIndex(c) {
+    if (typeof c === 'number' && isFinite(c)) return ((Math.round(c) % PALETTE.length) + PALETTE.length) % PALETTE.length;
+    if (typeof c === 'string' && /^\d+$/.test(c)) return (+c) % PALETTE.length;
+    return null;
+  }
+  function palOf(c) {
+    var i = palIndex(c);
+    if (i !== null) return PALETTE[i];
+    if (isHexColor(c)) {
+      var dark = document.body.classList.contains('dark');
+      return {
+        bd: dark ? mixHex(c, '#ffffff', 0.18) : c,
+        bg: dark ? mixHex(c, '#1b1f28', 0.80) : mixHex(c, '#ffffff', 0.88),
+        tx: dark ? mixHex(c, '#ffffff', 0.42) : mixHex(c, '#000000', 0.34),
+        name: '自定义'
+      };
+    }
+    return PALETTE[0];
+  }
+  function nextColor(prev) {
+    var i = palIndex(prev);
+    return i === null ? 0 : (i + 1) % PALETTE.length;
+  }
   var PRIO = { high: '高', mid: '中', low: '低' };
 
   var DEFAULT_CALS = [
@@ -1282,7 +1358,9 @@
       if (e < s) e = s;
       var tags = Array.isArray(t.tags) ? t.tags.filter(function (x) { return typeof x === 'string' && x.trim(); }).map(function (x) { return x.trim(); }) : [];
       var deps = Array.isArray(t.deps) ? t.deps.filter(function (x) { return typeof x === 'string' || typeof x === 'number'; }) : [];
-      var color = typeof t.color === 'number' ? ((t.color % PALETTE.length) + PALETTE.length) % PALETTE.length : (n % PALETTE.length);
+      /* color 可以是预设下标，也可以是自定义的 #rrggbb */
+      var color = (palIndex(t.color) !== null) ? palIndex(t.color)
+        : (isHexColor(t.color) ? String(t.color).toLowerCase() : (n % PALETTE.length));
       var cal = (t.cal && calExists(t.cal)) ? t.cal : DEFAULT_ACTIVE;
       var id = (keepId && (typeof t.id === 'string' || typeof t.id === 'number')) ? String(t.id) : newId();
       if (seen[id]) id = newId();          // 去重：导入/合并时 id 冲突会让依赖线错位
@@ -1575,7 +1653,12 @@
       var segS = s < wStart ? wStart : s, segE = e > wEnd ? wEnd : e;
       segs.push({ t: t, col: diffDays(wStart, segS), span: diffDays(segS, segE) + 1, openL: s < wStart, openR: e > wEnd, totalDays: diffDays(s, e) + 1, isStart: sameDay(s, segS) });
     });
-    segs.sort(function (a, b) { return a.col - b.col || b.span - a.span; });
+    /* 起始日相同的条，按 todos 里的先后排——用户上下拖动改的就是这个顺序 */
+    var _ord = {};
+    todos.forEach(function (t, i) { _ord[t.id] = i; });
+    segs.sort(function (a, b) {
+      return a.col - b.col || ((_ord[a.t.id] || 0) - (_ord[b.t.id] || 0)) || b.span - a.span;
+    });
     var laneEnd = [];
     segs.forEach(function (sg) { var lane = 0; while (laneEnd[lane] !== undefined && laneEnd[lane] >= sg.col) lane++; laneEnd[lane] = sg.col + sg.span - 1; sg.lane = lane; });
     return { days: days, segs: segs, lanes: laneEnd.length, need: HEAD_H + laneEnd.length * (BAR_H + BAR_GAP) + 12 };
@@ -1643,7 +1726,8 @@
   }
 
   function renderBar(sg, row, barH) {
-    var p = PALETTE[sg.t.color % PALETTE.length] || PALETTE[0];
+    var p = palOf(sg.t.color);
+    var pi = palIndex(sg.t.color);
     var bar = document.createElement('div');
     bar.className = 'bar' + (sg.t.done ? ' done' : '');
     bar.style.left = 'calc(' + (sg.col * (100 / 7)) + '% + 4px)';
@@ -1656,8 +1740,9 @@
     if (sg.openL) { bar.style.borderTopLeftRadius = '0'; bar.style.borderBottomLeftRadius = '0'; }
     if (sg.openR) { bar.style.borderTopRightRadius = '0'; bar.style.borderBottomRightRadius = '0'; }
     bar.dataset.id = String(sg.t.id);
-    bar.dataset.c = String(sg.t.color % PALETTE.length);
+    bar.dataset.c = (pi === null) ? 'x' : String(pi);
     bar.dataset.span = String(sg.span);
+    bar.style.setProperty('--bd', p.bd);   // 自定义色在深色主题下靠它现算
     bar.tabIndex = 0;
     bar.setAttribute('role', 'button');
     bar.setAttribute('aria-label', sg.t.text + '，' + sg.t.start + ' 至 ' + sg.t.end + '，点击编辑');
@@ -1757,8 +1842,11 @@
       listEl.appendChild(empty);
       return;
     }
-    items.slice().sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; }).forEach(function (t) {
-      var p = PALETTE[t.color % PALETTE.length] || PALETTE[0];
+    items.slice().sort(function (a, b) {
+      if (a.start !== b.start) return a.start < b.start ? -1 : 1;
+      return todos.indexOf(a) - todos.indexOf(b);
+    }).forEach(function (t) {
+      var p = palOf(t.color);
       var days = diffDays(parse(t.start), parse(t.end)) + 1;
       var li = document.createElement('li'); li.className = 'item' + (t.done ? ' done' : '') + (selected[t.id] ? ' sel' : '');
       li.title = '点击编辑';
@@ -1951,7 +2039,7 @@
   }
 
   /* ---------- 编辑弹窗 ---------- */
-  var editingId = null, editingColor = 0, editingDone = false, modalMask = $('modalMask');
+  var editingId = null, editingColor = 0, editingDone = false, colorTouched = false, modalMask = $('modalMask');
   function openEditor(idOrNull) {
     editingId = idOrNull;
     var t = idOrNull ? byId(idOrNull) : null;
@@ -1960,7 +2048,8 @@
     var base = t ? parse(t.start) : parse(startEl.value) || TODAY;
     var baseE = t ? parse(t.end) : parse(endEl.value) || base;
     $('mStart').value = fmt(base); $('mEnd').value = fmt(baseE);
-    editingColor = t ? t.color : (todos.length ? (todos[todos.length - 1].color + 1) % PALETTE.length : 0);
+    editingColor = t ? t.color : (todos.length ? nextColor(todos[todos.length - 1].color) : 0);
+    colorTouched = false;   // 还没手动挑过色，选「高优先级」时可以自动改红
     editingDone = t ? !!t.done : false; setStateSeg();
     $('mPrio').value = t ? t.prio : '';
     $('mRepeat').value = t ? t.repeat : 'none';
@@ -1977,7 +2066,45 @@
     setTimeout(function () { $('mText').focus(); }, 30);
   }
   function setStateSeg() { document.querySelectorAll('#mState button').forEach(function (b) { b.classList.toggle('on', (b.dataset.s === '1') === editingDone); }); }
-  function renderSwatches() { var box = $('mSwatches'); box.innerHTML = ''; PALETTE.forEach(function (p, i) { var s = document.createElement('div'); s.className = 'swatch' + (i === editingColor ? ' on' : ''); s.style.background = p.bg; s.style.boxShadow = 'inset 0 0 0 2px ' + p.bd; s.addEventListener('click', function () { editingColor = i; renderSwatches(); }); box.appendChild(s); }); }
+  function renderSwatches() {
+    var box = $('mSwatches'); box.innerHTML = '';
+    var cur = editingColor;
+    var custom = isHexColor(cur);
+    var curHex = custom ? cur : PALETTE[palIndex(cur) === null ? 0 : palIndex(cur)].bd;
+    PALETTE.forEach(function (p, i) {
+      var s = document.createElement('div');
+      s.className = 'swatch' + (palIndex(cur) === i ? ' on' : '');
+      s.style.background = p.bg;
+      s.style.boxShadow = 'inset 0 0 0 2px ' + p.bd;
+      s.title = p.name;
+      s.addEventListener('click', function () { editingColor = i; colorTouched = true; renderSwatches(); });
+      box.appendChild(s);
+    });
+    /* 最后一格点开系统取色器，选什么用什么 */
+    var cw = document.createElement('label');
+    cw.className = 'swatch custom' + (custom ? ' on' : '');
+    cw.title = '自定义颜色';
+    if (custom) {
+      cw.style.background = mixHex(cur, '#ffffff', 0.88);
+      cw.style.boxShadow = 'inset 0 0 0 2px ' + cur;
+    } else { cw.textContent = '+'; }
+    var inp = document.createElement('input');
+    inp.type = 'color'; inp.value = curHex;
+    inp.addEventListener('input', function () {
+      editingColor = this.value; colorTouched = true;
+      /* 不能整块重建：重画会把正在打开的系统取色器关掉。这里只更新这一格 */
+      cw.style.background = mixHex(this.value, '#ffffff', 0.88);
+      cw.style.boxShadow = 'inset 0 0 0 2px ' + this.value;
+      cw.classList.add('on');
+      Array.prototype.forEach.call(box.children, function (el) { if (el !== cw) el.classList.remove('on'); });
+    });
+    cw.appendChild(inp);
+    box.appendChild(cw);
+  }
+  /* 新建时选「高优先级」，颜色默认落到红色；已经手动挑过色就不动 */
+  $('mPrio').addEventListener('change', function () {
+    if (!editingId && !colorTouched && this.value === 'high') { editingColor = HIGH_COLOR; renderSwatches(); }
+  });
   function renderDeps(t) {
     var box = $('mDeps'); box.innerHTML = '';
     var others = todos.filter(function (x) { return x.id !== (t ? t.id : null); });
@@ -2314,6 +2441,7 @@
     aiCall('save', { payload: aiPayload() }).then(function (r) {
       $('aiKey').value = '';
       $('aiKeyHint').textContent = '已保存 Key：' + r.data.keyMask;
+      aiReady = true;   // 存完当场生效，不用重启
       aiTestMsg('ok', '设置已保存 · ' + r.data.model);
     }).catch(function (e) { aiTestMsg('err', '保存失败：' + aiErrText(e)); });
   }
@@ -2645,6 +2773,89 @@
     return { text: s, start: fmt(start), end: fmt(end) };
   }
 
+  /* ---------- AI 识别日期（只填日期，绝不改标题） ---------- */
+  /* 这个提示词的重点是"只回 JSON"：早期做法让模型返回整条待办，
+     结果它顺手把原文改写成一句通顺的话，标题就不是用户写的那句了。
+     现在模型只许吐两个日期，标题永远走用户输入的原文。 */
+  var AI_DATE_PROMPT = [
+    '你是日期解析器。输入是一句中文待办，把里面的时间信息解析成起止日期。',
+    '只输出一行 JSON，不要解释、不要 Markdown 代码块、不要复述原文、不要给建议：',
+    '{"start":"YYYY-MM-DD","end":"YYYY-MM-DD"}',
+    '规则：',
+    '1. 只有一天时 start 与 end 相同。',
+    '2. 完全看不出时间，就输出 {"start":"","end":""}。',
+    '3. 相对说法（明天、下周三、月底前、两周内、国庆后）按给定的今天推算。',
+    '4. 拿不准宁可留空，不要编日期。'
+  ].join('\n');
+
+  var aiReady = false, _aiDateTimer = null, _aiDateBusy = false, _aiDateFor = '', _aiDateCache = {};
+
+  /* 启动时探一次有没有配 Key；没配就完全不打扰 */
+  function probeAiReady() {
+    if (!HAS_HOST) return;
+    aiCall('get').then(function (r) { aiReady = !!(r.data && r.data.hasKey); }).catch(function () {});
+  }
+
+  function showAiDateHint(msg) {
+    parseHintEl.textContent = msg;
+    parseHintEl.classList.remove('hidden');
+  }
+
+  function scheduleAiParse() {
+    clearTimeout(_aiDateTimer);
+    var raw = inputEl.value.trim();
+    if (!raw || raw.length < 3 || !HAS_HOST || !aiReady) return;
+    if (parseQuick(raw)) return;                 // 本地规则已经认出来了，不必花 token
+    if (_aiDateCache.hasOwnProperty(raw)) { applyAiDate(raw, _aiDateCache[raw]); return; }
+    if (_aiDateFor === raw) return;              // 这句问过了
+    _aiDateTimer = setTimeout(function () { runAiParse(raw); }, 900);
+  }
+
+  function runAiParse(raw) {
+    if (_aiDateBusy) return;
+    _aiDateBusy = true; _aiDateFor = raw;
+    showAiDateHint('🤖 正在识别日期…');
+    aiCall('gen', {
+      payload: {
+        system: AI_DATE_PROMPT,
+        user: '今天是 ' + fmt(TODAY) + '（' + WD[TODAY.getDay()] + '）。输入：' + raw,
+        temperature: 0
+      }
+    }).then(function (r) {
+      _aiDateBusy = false;
+      var g = parseAiDateJson(r.text);
+      _aiDateCache[raw] = g;
+      applyAiDate(raw, g);
+    }).catch(function (e) {
+      _aiDateBusy = false;
+      showAiDateHint('AI 没识别出来（' + aiErrText(e) + '），可以手动改右侧日期');
+    });
+  }
+
+  /* 从模型返回里夹出第一个 JSON 对象，容错到"前面多说了两句"也能用 */
+  function parseAiDateJson(txt) {
+    var m = String(txt || '').match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try {
+      var o = JSON.parse(m[0]);
+      var okDate = /^\d{4}-\d{2}-\d{2}$/;
+      var st = okDate.test(o.start || '') ? o.start : '';
+      var en = okDate.test(o.end || '') ? o.end : st;
+      if (!st) return null;
+      if (en < st) en = st;
+      return { start: st, end: en };
+    } catch (e) { return null; }
+  }
+
+  function applyAiDate(raw, g) {
+    if (inputEl.value.trim() !== raw) return;    // 用户又改了输入，别把旧结果填进去
+    if (!g) { showAiDateHint('🤖 没从这句话里看出日期，按右侧日期创建'); return; }
+    startEl.value = g.start; endEl.value = g.end;
+    var n = diffDays(parse(g.start), parse(g.end)) + 1;
+    showAiDateHint('🤖 识别到 ' + md(parse(g.start)) + (n > 1 ? ' → ' + md(parse(g.end)) + '（' + n + ' 天）' : '') +
+      '　标题仍是你写的原话');
+  }
+
   /* ---------- 日历拖拽新建 ---------- */
   var dc = { active: false, start: null, moved: false, cells: [] };
   function onDayMouseDown(e) {
@@ -2701,10 +2912,22 @@
       bars.push({ el: b, w0: b.getBoundingClientRect().width });
       b.classList.add('drag');
     });
+    /* 同一周里其他条的中心线：上下拖动时用它算"该插到第几个" */
+    var rows = [], seen = {};
+    weekEl.querySelectorAll('.bar').forEach(function (b) {
+      var id = b.dataset.id;
+      if (seen[id]) return;
+      seen[id] = 1;
+      var r = b.getBoundingClientRect();
+      rows.push({ id: id, cy: r.top + r.height / 2 });
+    });
+    rows.sort(function (a, b) { return a.cy - b.cy; });
+
     _barDrag = {
-      id: sg.t.id, mode: mode, x0: e.clientX, colW: colW,
-      days: 0, moved: false, s0: sg.t.start, e0: sg.t.end,
-      bars: bars, tip: null
+      id: sg.t.id, mode: mode, x0: e.clientX, y0: e.clientY, colW: colW,
+      days: 0, moved: false, axis: null, s0: sg.t.start, e0: sg.t.end,
+      bars: bars, rows: rows, dropIdx: -1, tip: null, line: null,
+      left: rect.left, width: rect.width
     };
     document.addEventListener('mousemove', onBarDragMove);
     document.addEventListener('mouseup', onBarDragUp);
@@ -2737,11 +2960,19 @@
 
   function onBarDragMove(e) {
     var d = _barDrag; if (!d) return;
-    var dx = e.clientX - d.x0;
+    var dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+    var adx = Math.abs(dx), ady = Math.abs(dy);
     if (!d.moved) {
-      if (Math.abs(dx) < 4) return;        // 手抖几像素不算拖动，否则点一下就可能改错日期
+      if (adx < 4 && ady < 4) return;   // 手抖几像素不算拖动
       d.moved = true;
     }
+    if (!d.axis) {
+      /* 位移还太小就先不定方向：鼠标刚起步的那一下往往只有几像素，
+         过早锁成水平会让后面的竖向拖动全部失效 */
+      if (adx < 8 && ady < 8) return;
+      d.axis = (ady > adx * 1.2) ? 'v' : 'h';   // 竖向明显占优才算调顺序
+    }
+    if (d.axis === 'v') { moveBarVert(e, d, dy); return; }
     var days = Math.round(dx / d.colW);
     if (days === d.days) { placeDragTip(e); return; }
     d.days = days;
@@ -2764,6 +2995,42 @@
     else showDragTip(e, '结束改为 ' + md(g.e) + ' · 共 ' + span + ' 天');
   }
 
+  /* 竖向拖动：只调同一周内的先后，不碰日期 */
+  function moveBarVert(e, d, dy) {
+    d.bars.forEach(function (it) { it.el.style.transform = 'translateY(' + dy + 'px)'; });
+    var others = d.rows.filter(function (r) { return r.id !== d.id; });
+    var idx = 0;
+    others.forEach(function (r) { if (e.clientY > r.cy) idx++; });
+    d.dropIdx = idx;
+    if (!others.length) { if (d.line) d.line.style.display = 'none'; return; }
+    var y = idx === 0 ? others[0].cy - 13
+      : idx >= others.length ? others[others.length - 1].cy + 13
+        : (others[idx - 1].cy + others[idx].cy) / 2;
+    if (!d.line) {
+      d.line = document.createElement('div');
+      d.line.className = 'drop-line';
+      document.body.appendChild(d.line);
+    }
+    d.line.style.display = '';
+    d.line.style.left = d.left + 'px';
+    d.line.style.width = d.width + 'px';
+    d.line.style.top = y + 'px';
+    showDragTip(e, '调整顺序：第 ' + (idx + 1) + ' 位');
+  }
+
+  /* 只重排这几条任务在 todos 里的相对位置，其余任务原地不动 */
+  function applyTaskOrder(ids) {
+    var set = {}, map = {}, slots = [];
+    ids.forEach(function (id) { set[id] = 1; });
+    todos.forEach(function (t, i) {
+      if (!set[t.id]) return;
+      map[t.id] = t;
+      slots.push(i);
+    });
+    if (slots.length !== ids.length) return;   // 有任务已被外部删掉，别乱排
+    slots.forEach(function (pos, k) { todos[pos] = map[ids[k]]; });
+  }
+
   function onBarDragUp() {
     document.removeEventListener('mousemove', onBarDragMove);
     document.removeEventListener('mouseup', onBarDragUp);
@@ -2774,7 +3041,22 @@
       it.el.style.transform = ''; it.el.style.width = '';
     });
     if (d.tip) d.tip.remove();
-    if (!d.moved || !d.days) return;       // 没真拖 → 交给 click 去打开编辑框
+    if (d.line) { d.line.remove(); d.line = null; }
+    if (!d.moved) return;                  // 没真拖 → 交给 click 去打开编辑框
+
+    if (d.axis === 'v') {
+      var before = d.rows.map(function (r) { return r.id; });
+      var others = before.filter(function (id) { return id !== d.id; });
+      var idx = Math.max(0, Math.min(others.length, d.dropIdx));
+      var ids = others.slice(); ids.splice(idx, 0, d.id);
+      if (ids.join('|') === before.join('|')) return;   // 位置没变
+      applyTaskOrder(ids);
+      save(); renderAll();
+      _dragEndAt = Date.now(); _dragEndId = d.id;
+      toast('已调整为第 ' + (idx + 1) + ' 位');
+      return;
+    }
+    if (!d.days) return;
 
     var g = dragDates(d, d.days);
     var t = byId(d.id); if (!t) return;
@@ -2816,7 +3098,7 @@
     if (!raw) { parseHintEl.classList.add('hidden'); return; }
     setParseHint(parseQuick(raw));
   }
-  inputEl.addEventListener('input', updateParseHint);
+  inputEl.addEventListener('input', function () { updateParseHint(); scheduleAiParse(); });
 
   formEl.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -3071,6 +3353,7 @@
   if (theme === 'auto') setThemeAuto(); else applyTheme(theme);
   var todayStr = fmt(TODAY); startEl.value = todayStr; endEl.value = todayStr;
   renderAll();
+  probeAiReady();
   inputEl.focus();
   if (todos.length) snapshot('startup');
   setInterval(function () { if (todos.length) snapshot('auto'); }, 5 * 60 * 1000);  // 每 5 分钟一份滚动快照
