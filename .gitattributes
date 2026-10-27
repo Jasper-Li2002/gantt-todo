@@ -1,0 +1,12 @@
+* text=auto
+
+# Windows 侧文件保持 CRLF，避免每次改动整片 diff
+*.cs    text eol=crlf
+*.csproj text eol=crlf
+*.ps1   text eol=crlf
+
+# 前端与文档走 LF
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.txt   -text

@@ -1,0 +1,22 @@
+# 构建产物
+winapp/bin/
+winapp/obj/
+winapp/web/          # 由 todo.html 在构建时同步过去，不入库
+release/
+dist/
+
+# 早期 Electron 原型遗留（已废弃，不要再进仓库）
+desktop/
+
+# 本地调试脚本与截图
+_shots/
+_debug.js
+_smoke.js
+_shots.js
+
+# 编辑器 / 系统
+.vs/
+*.user
+*.suo
+Thumbs.db
+.DS_Store

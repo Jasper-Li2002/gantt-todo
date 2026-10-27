@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>TodoCalendar</AssemblyName>
+    <RootNamespace>TodoCalendar</RootNamespace>
+  <AssemblyTitle>日历待办</AssemblyTitle>
+  <Product>日历待办 · 甘特视图</Product>
+  <Company>Jasper</Company>
+  <Version>2.5.10</Version>
+  <FileVersion>2.5.10.0</FileVersion>
+    <ApplicationIcon>build\icon.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+    <EmbeddedResource Include="web\index.html" LogicalName="TodoCalendar.web.index.html" />
+  </ItemGroup>
+
+  <!-- 构建前把根目录的 todo.html（唯一开发源）同步进 web\index.html，避免两份页面脱节 -->
+  <Target Name="SyncWebPage" BeforeTargets="PrepareForBuild" Condition="Exists('..\todo.html')">
+    <Copy SourceFiles="..\todo.html" DestinationFiles="web\index.html" />
+  </Target>
+
+</Project>
