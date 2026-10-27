@@ -11,7 +11,7 @@ Windows 桌面待办 / 排期工具。WinForms 外壳 + WebView2 承载单页前
 ## 仓库
 
 - 远端：`https://github.com/Jasper-Li2002/gantt-todo`（私有）
-- 主分支 `main`，版本以 tag 标记（当前 `v2.5.10`）
+- 主分支 `main`，版本以 tag 标记（当前 `v2.6.0`）
 - 推 tag 自动触发 `.github/workflows/release.yml` 出包并发 Release
 
 ## 目录结构
@@ -45,21 +45,28 @@ dotnet build winapp/TodoCalendar.csproj -c Release        # 编译检查
 dotnet publish winapp/TodoCalendar.csproj -c Release -o release/fd   # 自用（框架依赖，1.6MB）
 ```
 
-部署到本机：关闭正在运行的实例，把 `release/fd/TodoCalendar.exe` 覆盖到程序目录。
+部署到本机：运行 `tools\pack.ps1` 会自动部署到 `C:\App\TodoCalendar\TodoCalendar.exe`
+（脚本会先停掉正在运行的实例、覆盖、校验哈希、修正开机自启路径、再拉起）。
+手工部署就是把 `release/sc/TodoCalendar.exe`（或 `release/fd/` 里的）覆盖到那个目录。
 **注意**：改了前端必须同时升 `winapp/TodoCalendar.csproj` 的 `Version` 与 `FileVersion`，
 否则启动时不会重新释放内嵌页面（判断依据是版本号）。
+
+数据与程序位置无关：待办在 `%APPDATA%\TodoCalendar\todos.json`，页面缓存和 WebView2
+用户数据在 `%LOCALAPPDATA%\TodoCalendar\`，所以移动/替换 exe 不影响已有数据。
 
 ## 出分发包
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\pack.ps1
+powershell -ExecutionPolicy Bypass -File tools\pack.ps1              # 编译 + 打包 + 部署到 C:\App\TodoCalendar
+powershell -ExecutionPolicy Bypass -File tools\pack.ps1 -NoDeploy    # 只出包，不动本机安装
+powershell -ExecutionPolicy Bypass -File tools\pack.ps1 -InstallDir 'D:\Apps\TodoCalendar'  # 换安装位置
 ```
 
 产出 `dist/日历待办-v<版本>-win64.zip`（自包含单文件，目标机器不需要装 .NET）。
 
 ## 版本约定
 
-- **改功能 / 改文案 = 升版本号**，格式 `主.次.修订`，当前线在 2.5.x
+- **改功能 / 改文案 = 升版本号**，格式 `主.次.修订`，当前线在 2.6.x
 - 每版在 `docs/使用说明.txt` 顶部加一节 `【vX.Y.Z 做了什么】日期`
 - 出包后打 tag：`git tag -a v2.5.10 -m "..."`，tag 与 zip 里的版本必须一致
 
