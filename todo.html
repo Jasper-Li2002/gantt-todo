@@ -1588,7 +1588,12 @@
     var total = (avail && avail > 120) ? avail : needSum + plan.length * 26;
     var base = total / plan.length;
     for (var i = 0; i < 6; i++) { var excess = plan.reduce(function (acc, p) { return acc + Math.max(0, p.need - base); }, 0); base = (total - excess) / plan.length; }
-    base = Math.max(46, Math.min(112, base));
+    /* 原来这里是 Math.min(112, base)：1080p 上刚好铺满，换到扩展屏 / 竖屏后
+       5~6 行只占上半屏，下面空一大片。改成跟着可用高度长高，
+       只留 280px 上限（约能放 10 条任务），免得在超高屏上单行高得没边。 */
+    var cap = 112;
+    if (avail && avail > 120) cap = Math.max(112, Math.min(280, Math.round(avail / plan.length)));
+    base = Math.max(46, Math.min(cap, base));
     /* 行高不再封顶：一周内重叠任务超过 4~5 条时，之前会被裁到 112px，
        任务条溢出压到下一周。这里让行按真实需要的泳道数长高，外层 cal-wrap 自己滚动。 */
     return plan.map(function (p) { return Math.round(Math.max(base, p.need)); });
