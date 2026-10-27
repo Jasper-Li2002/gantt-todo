@@ -1,4 +1,4 @@
-# 日历待办 · 甘特视图（TodoCalendar）
+# gantt-todo · 日历待办（甘特视图）
 
 Windows 桌面待办 / 排期工具。WinForms 外壳 + WebView2 承载单页前端，数据全部存在本机。
 
@@ -7,6 +7,12 @@ Windows 桌面待办 / 排期工具。WinForms 外壳 + WebView2 承载单页前
 - 托盘常驻 + 开机自启，到期待办每天提醒一次（含剩余时间与跨天过半提醒）
 - AI 日报 / 周报：支持 DeepSeek / 通义千问 / Kimi / 智谱，Key 用 Windows DPAPI 加密存本机
 - 数据：`%APPDATA%\TodoCalendar\todos.json`，与主程序、AI、MCP 同源
+
+## 仓库
+
+- 远端：`https://github.com/Jasper-Li2002/gantt-todo`（私有）
+- 主分支 `main`，版本以 tag 标记（当前 `v2.5.10`）
+- 推 tag 自动触发 `.github/workflows/release.yml` 出包并发 Release
 
 ## 目录结构
 
