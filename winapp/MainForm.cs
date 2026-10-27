@@ -48,6 +48,7 @@ public sealed partial class MainForm : Form
     private System.Windows.Forms.Timer _reminderTimer;
     private Thread _showThread;
     private string _lastReminderDay;
+    private string _pendingUpdatePage;   // 后台查到新版本后，气泡被点击时打开的地址
 
     public MainForm(string importFile = null, EventWaitHandle showEvent = null, bool startHidden = false)
     {
@@ -222,16 +223,19 @@ public sealed partial class MainForm : Form
         _topmostItem.CheckOnClick = true;
         _topmostItem.Checked = false;
         _topmostItem.Click += (_, _) => { TopMost = _topmostItem.Checked; };
+        var checkUpdate = new ToolStripMenuItem("检查更新…");
+        checkUpdate.Click += async (_, _) => await CheckUpdateAsync(true);
         var about = new ToolStripMenuItem("关于");
         about.Click += (_, _) => MessageBox.Show(this,
             "日历待办 · 甘特视图 v" + (Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?") + "\n"
             + "个人待办工具：日历甘特、拖拽改期、优先级、标签、进度、重复、依赖、导出与提醒。\n\n"
+            + "下载页：" + UpdateService.DefaultPage + "\n"
             + "数据文件：" + TodoFile + "\n自动备份：" + TodoFile + ".bak",
             "关于", MessageBoxButtons.OK, MessageBoxIcon.Information);
         var exit = new ToolStripMenuItem("退出");
         exit.Click += (_, _) => { _forceExit = true; Close(); };
 
-        _menu.Items.AddRange(new ToolStripItem[] { open, _autoStartItem, _topmostItem, about, exit });
+        _menu.Items.AddRange(new ToolStripItem[] { open, _autoStartItem, _topmostItem, checkUpdate, about, exit });
 
         _tray = new NotifyIcon
         {
@@ -248,7 +252,13 @@ public sealed partial class MainForm : Form
         };
         _tray.DoubleClick += (_, _) => ShowAndActivate();
         // 点提醒气泡直接打开窗口
-        _tray.BalloonTipClicked += (_, _) => ShowAndActivate();
+        _tray.BalloonTipClicked += (_, _) =>
+        {
+            // 更新提示的气泡点了要开下载页，其余（如到期提醒）点了打开窗口
+            var page = _pendingUpdatePage;
+            if (!string.IsNullOrEmpty(page)) { _pendingUpdatePage = null; OpenUrl(page); return; }
+            ShowAndActivate();
+        };
     }
 
     private static string ExePath => Application.ExecutablePath;
@@ -463,6 +473,112 @@ public sealed partial class MainForm : Form
         catch { /* 忽略 */ }
     }
 
+    // ---------------- 检查更新（只提示，不自动替换） ----------------
+
+    private string UpdateFile => Path.Combine(_dataDir, "update.json");
+
+    private void OpenUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+        catch (Exception ex) { LogBridge("open url failed: " + ex.Message); }
+    }
+
+    /// <summary>
+    /// manual = 用户主动点「检查更新」：无论结果都给反馈；
+    /// manual = false 则用于启动时的静默检查，只在新版本可用时弹一次气泡，失败不打扰。
+    /// </summary>
+    private async System.Threading.Tasks.Task CheckUpdateAsync(bool manual)
+    {
+        var cfg = UpdateService.Load(UpdateFile);
+        var cur = UpdateService.CurrentVersion;
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+
+        if (string.IsNullOrWhiteSpace(cfg.Url))
+        {
+            // 没配更新源时必须诚实说明，不能假装"已是最新"
+            if (!manual) return;
+            var r = MessageBox.Show(this,
+                "还没有配置「更新源」，所以没法自动比对版本。\n\n"
+                + "当前版本：v" + cur + "\n\n"
+                + "要现在打开下载页，自己去看看有没有新版吗？",
+                "检查更新", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+            if (r == DialogResult.Yes) OpenUrl(UpdateService.DefaultPage);
+            return;
+        }
+
+        UpdateFeed feed;
+        try
+        {
+            feed = await UpdateService.FetchAsync(cfg.Url).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            if (manual)
+                MessageBox.Show(this,
+                    "检查更新失败：" + ex.Message + "\n\n当前版本：v" + cur,
+                    "检查更新", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        cfg.LastCheck = today;
+        bool newer = UpdateService.IsNewer(feed.Version, cur);
+        bool ignored = string.Equals(UpdateService.Normalize(cfg.Ignored),
+            UpdateService.Normalize(feed.Version), StringComparison.OrdinalIgnoreCase);
+
+        if (!newer)
+        {
+            UpdateService.Save(UpdateFile, cfg);
+            if (manual)
+                MessageBox.Show(this, "已经是最新版本：v" + cur, "检查更新",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (!manual)
+        {
+            UpdateService.Save(UpdateFile, cfg);
+            if (ignored) return;
+            _pendingUpdatePage = feed.Page;
+            _tray?.ShowBalloonTip(8000, "发现新版本 v" + feed.Version,
+                "当前 v" + cur + "，点击这里打开下载页。", ToolTipIcon.Info);
+            return;
+        }
+
+        var body = "当前版本：v" + cur + "\n最新版本：v" + feed.Version + "\n";
+        if (!string.IsNullOrWhiteSpace(feed.Notes))
+        {
+            var notes = feed.Notes.Trim();
+            if (notes.Length > 400) notes = notes.Substring(0, 400) + "…";
+            body += "\n更新说明：\n" + notes + "\n";
+        }
+        body += "\n是 = 打开下载页　　否 = 本版不再提醒　　取消 = 什么也不做";
+
+        var ans = MessageBox.Show(this, body, "发现新版本", MessageBoxButtons.YesNoCancel,
+            MessageBoxIcon.Information);
+        if (ans == DialogResult.Yes) OpenUrl(feed.Page);
+        else if (ans == DialogResult.No)
+        {
+            cfg.Ignored = feed.Version;
+            UpdateService.Save(UpdateFile, cfg);
+        }
+        else UpdateService.Save(UpdateFile, cfg);
+    }
+
+    /// <summary>启动后静默查一次，每天最多一次，避免每次开程序都发请求</summary>
+    private async System.Threading.Tasks.Task CheckUpdateOnStartupAsync()
+    {
+        try
+        {
+            var cfg = UpdateService.Load(UpdateFile);
+            if (string.IsNullOrWhiteSpace(cfg.Url)) return;
+            if (cfg.LastCheck == DateTime.Today.ToString("yyyy-MM-dd")) return;
+            await CheckUpdateAsync(false);
+        }
+        catch { /* 更新检查失败绝不影响启动 */ }
+    }
+
+
     // ---------------- 数据落盘（原子写 + 自动备份） ----------------
 
     private static readonly object WriteLock = new object();
@@ -640,6 +756,10 @@ public sealed partial class MainForm : Form
                         core.PostWebMessageAsJson("{\"type\":\"autostartState\",\"on\":"
                             + (IsAutostartEnabled() ? "true" : "false") + "}");
                     }
+                    else if (type == "checkUpdate")
+                    {
+                        _ = CheckUpdateAsync(true);
+                    }
                 }
                 catch { /* 忽略桥接错误 */ }
             };
@@ -659,6 +779,7 @@ public sealed partial class MainForm : Form
                 if (_importFile != null) return;
                 await System.Threading.Tasks.Task.Delay(2500);
                 await CheckReminders();
+                _ = CheckUpdateOnStartupAsync();   // 联网查新版本，失败静默
             };
 
             core.NavigationCompleted += async (_, args) =>

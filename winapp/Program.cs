@@ -16,13 +16,9 @@ internal static class Program
             T("UNHANDLED: " + e.ExceptionObject);
         var importFile = ParseArg(args, "--import");
 
-        // 自检模式：把「此刻会弹出什么提醒」算成文本写文件就退出，不开窗口、不抢单实例
-        foreach (var a in args)
-            if (string.Equals(a, "--reminder-preview", StringComparison.OrdinalIgnoreCase))
-            {
-                ReminderPreview.Run(args);
-                return;
-            }
+        // 自检模式：算成文本写文件就退出，不开窗口、不抢单实例
+        if (HasFlag(args, "--check-update")) { UpdatePreview.Run(args); return; }
+        if (HasFlag(args, "--reminder-preview")) { ReminderPreview.Run(args); return; }
 
         // 开机自启用：静默起在托盘，不弹窗、不抢焦点
         var startHidden = HasFlag(args, "--tray") || HasFlag(args, "--minimized");

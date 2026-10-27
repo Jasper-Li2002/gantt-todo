@@ -70,6 +70,10 @@ powershell -ExecutionPolicy Bypass -File tools\pack.ps1
 release/fd/TodoCalendar.exe --reminder-preview --now "2026-10-24 10:00"
 # → 结果写到 %TEMP%\todocal-reminder.txt
 
+# 更新检查（只提示，不自动替换）
+release/fd/TodoCalendar.exe --check-update --url "更新源地址"
+# → 结果写到 %TEMP%\todocal-update.txt；更新源配置在 %APPDATA%\TodoCalendar\update.json
+
 # 前端渲染：用 playwright-core 驱动系统 Edge 直接加载 todo.html
 # 运行时日志：%TEMP%\todocal.log（reminder: / probe: / post ok: 等）
 ```

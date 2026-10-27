@@ -892,6 +892,11 @@
                   <button class="mchip" data-act="theme-dark">深色</button>
                 </div>
               </div>
+              <div class="sep"></div>
+              <div class="mgroup">
+                <div class="mgroup-h">版本</div>
+                <button data-act="check-update" style="margin-top:2px">检查更新…</button>
+              </div>
               <div class="mm-hint" id="mmHint">↓ 还有设置，可滚动查看</div>
             </div>
           </div>
@@ -2724,9 +2729,16 @@
       }, 2500);
     });
   }
+  /* 检查更新：只做提示，真正的下载交给浏览器打开下载页 */
+  function checkUpdate() {
+    if (!HAS_HOST) {
+      alert('浏览器预览模式下没有更新检查，双击 TodoCalendar.exe 运行才有效。');
+      return;
+    }
+    try { window.chrome.webview.postMessage(JSON.stringify({ type: 'checkUpdate' })); } catch (e) {}
+  }
   function toggleAutostart() {
-    if (!HAS_HOST) { renderAutostart(null); return; }
-    autostartCall('set', !_autostartOn).then(function (on) {
+    if (!HAS_HOST) { renderAutostart(null); return; }    autostartCall('set', !_autostartOn).then(function (on) {
       if (on === null) { toast('设置失败，请重试'); return; }
       renderAutostart(on);
       toast(on ? '已开启：开机自动在托盘运行' : '已关闭开机启动');
@@ -2793,6 +2805,7 @@
     else if (act === 'snap') restoreSnap();
     else if (act === 'clear') clearDone();
     else if (act === 'ai-settings') openAiSettings();
+    else if (act === 'check-update') checkUpdate();
     else if (act === 'theme-auto') setThemeAuto();
     else if (act === 'theme-light') applyTheme('light');
     else if (act === 'theme-dark') applyTheme('dark');
