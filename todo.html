@@ -435,6 +435,32 @@
   body.dark .bar[data-c="5"]{background:linear-gradient(90deg,#e08a63 0 3px,#2e201a 3px) !important;color:#f0a080 !important;box-shadow:inset 0 0 0 1px rgba(224,138,99,.16) !important;}
   .bar.out{animation:barOut .16s ease forwards;}
   @keyframes barOut{to{opacity:0;transform:scale(.94);}}
+
+  /* ---- 任务条拖动改期：拖条体整体平移，拖两端改工期 ---- */
+  .bar{cursor:grab;}
+  .bar .bcheck,.bar .bdel{cursor:pointer;}
+  /* 两端各画一条短竖线，提示"这里可以拖"——只在 hover 时出现，不占视觉重量 */
+  .bar::before,.bar::after{
+    content:'';position:absolute;top:50%;width:3px;border-radius:2px;
+    height:0;opacity:0;background:currentColor;pointer-events:none;z-index:3;
+    transform:translateY(-50%);transition:height .12s,opacity .12s;
+  }
+  .bar::before{left:2px;}
+  .bar::after{right:2px;}
+  .bar:hover::before,.bar:hover::after{height:10px;opacity:.33;}
+  .bar.drag{
+    /* transition 必须关掉，否则拖动时 transform 会一路追着跑，看着像拖影 */
+    transition:none !important;cursor:grabbing;z-index:30 !important;opacity:.97;
+    box-shadow:0 9px 24px rgba(20,26,45,.26),inset 0 0 0 1px rgba(75,87,210,.42) !important;
+  }
+  body.dark .bar.drag{box-shadow:0 9px 24px rgba(0,0,0,.55),inset 0 0 0 1px rgba(143,166,255,.5) !important;}
+  .bar.drag::before,.bar.drag::after{opacity:0;}
+  .drag-tip{
+    position:fixed;z-index:9999;pointer-events:none;
+    padding:5px 10px;border-radius:7px;font-size:12px;font-weight:650;line-height:1.45;
+    background:rgba(28,32,46,.95);color:#fff;white-space:nowrap;
+    box-shadow:0 8px 22px rgba(0,0,0,.3);
+  }
   .deps{position:absolute;left:0;top:0;pointer-events:none;z-index:4;overflow:visible;}
   .cal-empty{
     position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
@@ -1626,6 +1652,7 @@
     if (sg.openR) { bar.style.borderTopRightRadius = '0'; bar.style.borderBottomRightRadius = '0'; }
     bar.dataset.id = String(sg.t.id);
     bar.dataset.c = String(sg.t.color % PALETTE.length);
+    bar.dataset.span = String(sg.span);
     bar.tabIndex = 0;
     bar.setAttribute('role', 'button');
     bar.setAttribute('aria-label', sg.t.text + '，' + sg.t.start + ' 至 ' + sg.t.end + '，点击编辑');
@@ -1645,8 +1672,17 @@
     del.addEventListener('click', function (ev) { ev.stopPropagation(); remove(sg.t.id, bar); });
     bar.appendChild(del);
     bar.title = sg.t.text + '\n' + sg.t.start + ' → ' + sg.t.end + (sg.totalDays > 1 ? '（' + sg.totalDays + ' 天）' : '') + (sg.t.prio ? ' · 优先级' + PRIO[sg.t.prio] : '') + (sg.t.progress && !sg.t.done ? ' · 进度' + sg.t.progress + '%' : '') + '\n点击编辑';
-    bar.addEventListener('click', function () { openEditor(sg.t.id); });
-    bar.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    bar.addEventListener('click', function () {
+      if (sg.t.id === _dragEndId && Date.now() - _dragEndAt < 320) return;   // 刚拖完这条，别把松手当成"点击编辑"
+      openEditor(sg.t.id);
+    });
+    bar.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      e.stopPropagation();            // 别让日格把手势当成"拖拽新建区间"
+      var tg = e.target;
+      if (tg && tg.closest && tg.closest('.bcheck,.bdel')) return;   // 勾选 / 删除 各自处理
+      startBarDrag(e, bar, sg);
+    });
     row.appendChild(bar);
   }
 
@@ -1824,11 +1860,12 @@
   }
 
   var toastTimer = null;
-  function toast(msg, undoId) {
+  function toast(msg, undoId, onUndo) {
     var el = $('toast');
     $('toastMsg').textContent = msg;
     var undoBtn = $('toastUndo');
-    if (undoId) { undoBtn.style.display = ''; undoBtn.onclick = function () { restoreTrash(undoId); hideToast(); }; }
+    if (onUndo) { undoBtn.style.display = ''; undoBtn.onclick = function () { onUndo(); hideToast(); }; }
+    else if (undoId) { undoBtn.style.display = ''; undoBtn.onclick = function () { restoreTrash(undoId); hideToast(); }; }
     else { undoBtn.style.display = 'none'; }
     el.classList.add('show');
     clearTimeout(toastTimer);
@@ -2635,6 +2672,125 @@
     dc.active = false;
     if (wasMoved) { openEditor(null); $('mStart').value = s; $('mEnd').value = d1; }
     else { quickAdd(s); }
+  }
+
+  /* ---------- 甘特条拖动：整条平移 / 拖两端改工期 ---------- */
+  var EDGE_PX = 7;        // 两端各 7px 算"改工期"，中间拖才是整体平移
+  var DRAG_MIN_W = 42;    // 条太窄就不分两端了，只能整体拖，否则一点就变成改工期
+  var _barDrag = null, _dragEndAt = 0, _dragEndId = null;
+
+  function startBarDrag(e, bar, sg) {
+    var weekEl = bar.closest ? bar.closest('.week') : null; if (!weekEl) return;
+    var colW = weekEl.getBoundingClientRect().width / 7;
+    if (!(colW > 0)) return;
+    var rect = bar.getBoundingClientRect();
+    var offX = e.clientX - rect.left;
+    var mode = 'move';
+    if (rect.width >= DRAG_MIN_W) {
+      if (offX <= EDGE_PX) mode = 'l';
+      else if (offX >= rect.width - EDGE_PX) mode = 'r';
+    }
+    /* 一条跨周任务在月视图里被切成好几段，拖动时所有段一起动，视觉上才还是一条 */
+    var bars = [];
+    calEl.querySelectorAll('.bar[data-id="' + cssEsc(sg.t.id) + '"]').forEach(function (b) {
+      bars.push({ el: b, w0: b.getBoundingClientRect().width });
+      b.classList.add('drag');
+    });
+    _barDrag = {
+      id: sg.t.id, mode: mode, x0: e.clientX, colW: colW,
+      days: 0, moved: false, s0: sg.t.start, e0: sg.t.end,
+      bars: bars, tip: null
+    };
+    document.addEventListener('mousemove', onBarDragMove);
+    document.addEventListener('mouseup', onBarDragUp);
+  }
+
+  /* 按位移天数算新起止日期，带边界约束：起点不能越过终点，最小工期 1 天 */
+  function dragDates(d, days) {
+    var s = parse(d.s0), e = parse(d.e0);
+    var ns = s, ne = e;
+    if (d.mode === 'move') { ns = addDays(s, days); ne = addDays(e, days); }
+    else if (d.mode === 'l') { ns = addDays(s, days); if (diffDays(ns, e) < 0) ns = new Date(e.getTime()); }
+    else { ne = addDays(e, days); if (diffDays(s, ne) < 0) ne = new Date(s.getTime()); }
+    return { s: ns, e: ne, shiftS: diffDays(s, ns), shiftE: diffDays(e, ne) };
+  }
+
+  function placeDragTip(e) {
+    var tip = _barDrag && _barDrag.tip; if (!tip) return;
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top = (e.clientY + 18) + 'px';
+  }
+  function showDragTip(e, text) {
+    var d = _barDrag; if (!d) return;
+    if (!d.tip) {
+      d.tip = document.createElement('div'); d.tip.className = 'drag-tip';
+      document.body.appendChild(d.tip);
+    }
+    d.tip.textContent = text;
+    placeDragTip(e);
+  }
+
+  function onBarDragMove(e) {
+    var d = _barDrag; if (!d) return;
+    var dx = e.clientX - d.x0;
+    if (!d.moved) {
+      if (Math.abs(dx) < 4) return;        // 手抖几像素不算拖动，否则点一下就可能改错日期
+      d.moved = true;
+    }
+    var days = Math.round(dx / d.colW);
+    if (days === d.days) { placeDragTip(e); return; }
+    d.days = days;
+
+    var g = dragDates(d, days);
+    var movePx = 0, growPx = 0;
+    if (d.mode === 'move') movePx = days * d.colW;
+    else if (d.mode === 'l') { movePx = g.shiftS * d.colW; growPx = -g.shiftS * d.colW; }
+    else growPx = g.shiftE * d.colW;
+    /* 用 px 临时盖掉 calc 宽度，松手 renderAll 会恢复。
+       resize-l 是"右移 + 收窄"同时做，右边界原地不动，看着才是从左端拉。 */
+    d.bars.forEach(function (it) {
+      it.el.style.transform = 'translateX(' + movePx + 'px)';
+      if (growPx) it.el.style.width = Math.max(24, it.w0 + growPx) + 'px';
+    });
+
+    var span = diffDays(g.s, g.e) + 1;
+    if (d.mode === 'move') showDragTip(e, md(g.s) + ' → ' + md(g.e) + ' · ' + span + ' 天');
+    else if (d.mode === 'l') showDragTip(e, '开始改为 ' + md(g.s) + ' · 共 ' + span + ' 天');
+    else showDragTip(e, '结束改为 ' + md(g.e) + ' · 共 ' + span + ' 天');
+  }
+
+  function onBarDragUp() {
+    document.removeEventListener('mousemove', onBarDragMove);
+    document.removeEventListener('mouseup', onBarDragUp);
+    var d = _barDrag; if (!d) return;
+    _barDrag = null;
+    d.bars.forEach(function (it) {
+      it.el.classList.remove('drag');
+      it.el.style.transform = ''; it.el.style.width = '';
+    });
+    if (d.tip) d.tip.remove();
+    if (!d.moved || !d.days) return;       // 没真拖 → 交给 click 去打开编辑框
+
+    var g = dragDates(d, d.days);
+    var t = byId(d.id); if (!t) return;
+    var ns = fmt(g.s), ne = fmt(g.e);
+    if (ns === d.s0 && ne === d.e0) return;
+
+    t.start = ns; t.end = ne;
+    save(); renderAll();
+    _dragEndAt = Date.now(); _dragEndId = d.id;
+
+    var span = diffDays(g.s, g.e) + 1;
+    var still = calEl.querySelector('.bar[data-id="' + cssEsc(d.id) + '"]');
+    var prevS = d.s0, prevE = d.e0, tid = d.id;
+    /* 不占快照名额：拖错了当场点「撤销」更直接。快照留给误删这类事 */
+    toast('已改到 ' + md(g.s) + (span > 1 ? ' → ' + md(g.e) + ' · ' + span + ' 天' : '') +
+      (still ? '' : '　已移出当前视图，翻月可看'), null, function () {
+        var tt = byId(tid); if (!tt) return;
+        tt.start = prevS; tt.end = prevE;
+        save(); renderAll();
+        toast('已还原到 ' + md(parse(prevS)) + (prevS === prevE ? '' : ' → ' + md(parse(prevE))));
+      });
   }
 
   /* ---------- 事件 ---------- */
