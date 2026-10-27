@@ -45,5 +45,5 @@ jobs:
             dist/SHA256.txt
           generate_release_notes: true
           body: |
-            下载 `TodoCalendar-v*-win64.zip` 解压即用，不需要安装 .NET。
+            下载 `TodoCalendar-${{ github.ref_name }}-win64.zip` 解压即用，不需要安装 .NET。
             首次运行若出现「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」。
