@@ -658,6 +658,29 @@
     border:none;border-radius:6px;padding:3px 10px;cursor:pointer;margin-left:2px;transition:filter .14s;
   }
   .parse-hint .ph-ai:hover{filter:brightness(1.08);}
+
+  /* 提炼出多条时的确认列表：一段话里有几件事，逐条摊开，
+     确认后一次性建，省得一条条复制粘贴 */
+  .sum-list{margin-top:8px;padding:10px 12px 9px;border:1px solid var(--line2);border-radius:10px;background:var(--panel);}
+  .sum-head{font-size:12.5px;color:var(--text-dim);margin-bottom:6px;}
+  .sum-head b{color:var(--accent);font-weight:750;}
+  .sum-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;}
+  .sum-row:hover{background:var(--line);}
+  .sum-txt{flex:1 1 auto;min-width:0;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sum-when{flex:0 0 auto;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;}
+  .sum-del{
+    flex:0 0 auto;width:19px;height:19px;border-radius:5px;border:none;background:transparent;
+    color:var(--muted);cursor:pointer;font-size:11px;line-height:1;padding:0;
+  }
+  .sum-del:hover{background:rgba(229,84,95,.12);color:var(--danger);}
+  .sum-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:8px;}
+  .sum-foot button{
+    font:inherit;font-size:12px;font-weight:650;border-radius:7px;padding:5px 12px;cursor:pointer;
+    border:1px solid var(--line2);background:var(--card);color:var(--text-dim);
+  }
+  .sum-foot button:hover{background:var(--line);}
+  .sum-foot .sum-all{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .sum-foot .sum-all:hover{filter:brightness(1.07);background:var(--accent);}
   .progress-row{display:flex;align-items:center;gap:9px;}
   .progress-row input[type=range]{flex:1;accent-color:var(--accent);}
   .progress-val{font-size:12px;font-weight:700;min-width:38px;text-align:right;color:var(--accent);font-variant-numeric:tabular-nums;}
@@ -915,6 +938,15 @@
           <button class="btn-add" type="submit">添加</button>
         </form>
         <div class="parse-hint hidden" id="parseHint"></div>
+
+        <div class="sum-list hidden" id="sumList">
+          <div class="sum-head">🤖 这段话里有 <b id="sumCount">2</b> 件事，拆成这些待办：</div>
+          <div id="sumRows"></div>
+          <div class="sum-foot">
+            <button type="button" id="sumCancel">取消</button>
+            <button type="button" class="sum-all" id="sumAll">全部添加</button>
+          </div>
+        </div>
 
         <div class="toolbar">
           <div class="list-title" id="listTitle"></div>
@@ -2937,21 +2969,31 @@
      这里用户主动点按钮，就是要 AI 把长文压缩成一句短标题，
      所以提示词重点在"压缩"和"禁止复述原文"。 */
   var AI_TASK_PROMPT = [
-    '你把用户给的一整段话压缩成一条可执行的待办。',
+    '你把用户给的一整段话整理成若干条可执行的待办。',
     '只输出一行 JSON，不要解释、不要 Markdown 代码块、不要复述原文：',
-    '{"text":"...","start":"YYYY-MM-DD","end":"YYYY-MM-DD"}',
+    '{"tasks":[{"text":"...","start":"YYYY-MM-DD","end":"YYYY-MM-DD"}]}',
     '要求：',
-    '1. text 是 8~22 字的动作短语，动词开头，说清做什么、交付什么。',
-    '2. 严禁出现「根据」「综上」「这段」「用户」「提到」「已为您」这类词，严禁把整段复述一遍。',
-    '3. 保留原文里的关键对象（人名、系统名、文档名），不许编造原文没有的内容。',
-    '4. 原文没提时间就把 start 和 end 都留空字符串。',
-    '5. 只解析明确的时间表达（明天／下周三／10月30日／月底前／两周内）。',
-    '6. 看不出重点就取最靠前的一个具体动作。',
+    /* 一条待办装不下两件事：用户原文「1. 加日志 2. 排查偶发不执行」被压成
+       「加日志并写入项目目录」，第二件事整条丢了，所以必须先判断有几件事 */
+    '1. 先数清楚这段话里有几件独立的事：带编号（1. 2. / ① / -）、带分号、',
+    '   或者明显是两个不同动作，就一件事一条，分别返回；只有一件事就只返回一个元素。',
+    '2. 最多 5 条。',
+    '3. text 是 8~24 字的动作短语，动词开头，说清做什么、交付什么；',
+    '   不要带序号，不要带「优化：」「需求：」这类小标题。',
+    '4. 严禁出现「根据」「综上」「这段」「用户」「提到」「已为您」这类词，严禁把整段复述一遍。',
+    '5. 保留原文里的关键对象（人名、系统名、文档名、报错信息），不许编造原文没有的内容。',
+    '6. 原文没提时间就把 start 和 end 都留空字符串。',
+    '7. 只解析明确的时间表达（明天／下周三／10月30日／月底前／两周内）。',
+    '8. 看不出重点就取最靠前的一个具体动作。',
     /* 下面两条是用户反馈出来的：原文「下周2我想吃大闸蟹」被提炼成
        「下周2记录我想吃大闸蟹」——既没剪掉时间，又多塞了一个空动词 */
-    '7. text 里不要出现任何时间词，时间只放 start/end。',
-    '8. 原文已经说清了做什么（我想吃大闸蟹、把方案发老板），就照原文的说法写；',
-    '   严禁加「记录」「安排」「处理」「跟进」这类原文没有的空动词，也不要把它改成公文腔。'
+    '9. text 里不要出现任何时间词，时间只放 start/end。',
+    '10. 原文已经说清了做什么（我想吃大闸蟹、把方案发老板），就照原文的说法写；',
+    '    严禁加「记录」「安排」「处理」「跟进」这类原文没有的空动词，也不要改成公文腔。',
+    '示例只说明拆分粒度，不要照抄示例内容：',
+    '输入「优化：1. 加一个日志，日志内容写到项目目录 2. 为什么有的时候执行有的时候不执行」',
+    '输出 {"tasks":[{"text":"接入日志框架，日志输出到项目目录","start":"","end":""},' +
+      '{"text":"排查任务有时执行有时不执行的原因","start":"","end":""}]}'
   ].join('\n');
 
   var _aiSumBusy = false;
@@ -2964,7 +3006,7 @@
   function showSummarizeChip(raw) {
     parseHintEl.textContent = '';
     var tip = document.createElement('span');
-    tip.textContent = '这段话有点长，可以让 AI 提炼成一条待办　';
+    tip.textContent = '这段话里有几件事，可以让 AI 拆成待办　';
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'ph-ai';
@@ -2978,26 +3020,95 @@
     parseHintEl.classList.remove('hidden');
   }
 
-  function parseAiTaskJson(txt) {
+  function parseAiTasksJson(txt) {
     var m = String(txt || '').match(/\{[\s\S]*\}/);
     if (!m) return null;
     try {
       var o = JSON.parse(m[0]);
-      var text = String(o.text || '').trim().replace(/^["'「『]/, '').replace(/["'」』]$/, '').trim();
-      if (!text) return null;
+      /* 新形状是 tasks 数组；老的单条 {"text":...} 也认，免得模型抽风时全废 */
+      var arr = Array.isArray(o.tasks) ? o.tasks : (o && o.text ? [o] : []);
       var okDate = /^\d{4}-\d{2}-\d{2}$/;
-      var st = okDate.test(o.start || '') ? o.start : '';
-      var en = okDate.test(o.end || '') ? o.end : st;
-      if (st && en && en < st) en = st;
-      return { text: text.slice(0, 60), start: st, end: en };
+      var out = [];
+      arr.forEach(function (it) {
+        if (!it) return;
+        var text = String(it.text || '')
+          .replace(/^\s*[（(]?\d{1,2}\s*[.、)）．]\s*/, '')   // 模型偶尔把序号留在 text 里
+          .replace(/^["'「『]/, '').replace(/["'」』]$/, '').trim();
+        if (!text) return;
+        var st = okDate.test(it.start || '') ? it.start : '';
+        var en = okDate.test(it.end || '') ? it.end : st;
+        if (st && en < st) en = st;
+        out.push({ text: text.slice(0, 60), start: st, end: en });
+      });
+      return out.length ? out.slice(0, 5) : null;
     } catch (e) { return null; }
+  }
+
+  /* ---------- 一段话拆成多条：先列出来让人确认，再一次性建 ---------- */
+  var _sumTasks = [];
+  function sumListOpen() { var el = $('sumList'); return !!el && !el.classList.contains('hidden'); }
+  function hideSumList() { _sumTasks = []; var el = $('sumList'); if (el) el.classList.add('hidden'); }
+  function showSumList(list) {
+    _sumTasks = list.slice();
+    parseHintEl.classList.add('hidden');
+    renderSumList();
+    $('sumList').classList.remove('hidden');
+  }
+  function renderSumList() {
+    var box = $('sumRows'); box.innerHTML = '';
+    var base = parse(startEl.value) || TODAY;
+    _sumTasks.forEach(function (t, i) {
+      var row = document.createElement('div'); row.className = 'sum-row';
+      var tx = document.createElement('span'); tx.className = 'sum-txt';
+      tx.textContent = t.text; tx.title = t.text;
+      var wh = document.createElement('span'); wh.className = 'sum-when';
+      if (t.start) {
+        wh.textContent = md(parse(t.start)) + (t.end && t.end !== t.start ? '→' + md(parse(t.end)) : '');
+        wh.title = 'AI 从原文里解析到的日期';
+      } else {
+        wh.textContent = md(base);
+        wh.title = '原文没写时间，按右侧日期框建';
+      }
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'sum-del'; del.textContent = '✕'; del.title = '不要这条';
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        _sumTasks.splice(i, 1);
+        if (!_sumTasks.length) { hideSumList(); inputEl.focus(); return; }
+        renderSumList();
+      });
+      row.appendChild(tx); row.appendChild(wh); row.appendChild(del);
+      box.appendChild(row);
+    });
+    $('sumCount').textContent = _sumTasks.length;
+  }
+  function addSumAll() {
+    if (!_sumTasks.length) return;
+    var base = parse(startEl.value) || TODAY;
+    var ids = [];
+    _sumTasks.slice().forEach(function (t) {
+      var s = t.start ? parse(t.start) : base;
+      var e = t.end ? parse(t.end) : s;
+      add(t.text, fmt(s), fmt(e));
+      var last = todos[todos.length - 1];
+      if (last) ids.push(last.id);
+    });
+    hideSumList();
+    inputEl.value = '';
+    autoDate = true; dateTouched = false; parseHintEl.classList.add('hidden');
+    /* 批量建待办最容易误操作，给个一次撤销整批的入口 */
+    toast('已添加 ' + ids.length + ' 条待办', null, function () {
+      todos = todos.filter(function (x) { return ids.indexOf(x.id) < 0; });
+      save(); renderAll(); hideToast();
+    });
+    inputEl.focus();
   }
 
   function runSummarize(raw) {
     if (_aiSumBusy) return;
     if (inputEl.value.trim() !== raw) return;
     _aiSumBusy = true;
-    parseHintEl.textContent = '🤖 正在提炼…';
+    parseHintEl.textContent = '🤖 正在整理…';
     parseHintEl.classList.remove('hidden');
     aiCall('gen', {
       payload: {
@@ -3008,8 +3119,10 @@
     }).then(function (r) {
       _aiSumBusy = false;
       if (inputEl.value.trim() !== raw) return;      // 提炼期间用户又改了，别覆盖
-      var o = parseAiTaskJson(r.text);
-      if (!o) { showAiDateHint('AI 没能提炼出待办，可以直接用原文保存'); return; }
+      var list = parseAiTasksJson(r.text);
+      if (!list) { showAiDateHint('AI 没能提炼出待办，可以直接用原文保存'); return; }
+      if (list.length > 1) { showSumList(list); return; }   // 几件事就列几条，让人确认
+      var o = list[0];
       inputEl.value = o.text;
       if (o.start) { startEl.value = o.start; endEl.value = o.end || o.start; }
       var when = o.start ? (md(parse(o.start)) + (o.end && o.end !== o.start ? ' → ' + md(parse(o.end)) : '')) : '';
@@ -3361,10 +3474,15 @@
     if (pq) { setParseHint(pq); return; }
     setParseHint(null);
   }
-  inputEl.addEventListener('input', function () { updateParseHint(); scheduleAiParse(); });
+  inputEl.addEventListener('input', function () {
+    if (sumListOpen()) hideSumList();     // 用户在改原文了，之前那份拆分结果就过期了
+    updateParseHint(); scheduleAiParse();
+  });
 
   formEl.addEventListener('submit', function (e) {
     e.preventDefault();
+    /* 拆分面板开着时按回车 = 全部添加，否则回车只会把整段原文建成一条 */
+    if (sumListOpen()) { addSumAll(); return; }
     var raw = inputEl.value.trim(); if (!raw) { formEl.classList.remove('shake'); void formEl.offsetWidth; formEl.classList.add('shake'); inputEl.focus(); return; }
     var pq = autoDate ? (looksLong(raw) ? null : parseQuick(raw)) : null;
     var text, s, en;
@@ -3390,6 +3508,9 @@
 
   startEl.addEventListener('change', function () { dateTouched = true; if (!startEl.value) startEl.value = fmt(TODAY); if (!endEl.value || endEl.value < startEl.value) endEl.value = startEl.value; });
   endEl.addEventListener('change', function () { dateTouched = true; if (!endEl.value) endEl.value = startEl.value || fmt(TODAY); if (startEl.value && endEl.value < startEl.value) endEl.value = startEl.value; });
+
+  $('sumAll').addEventListener('click', addSumAll);
+  $('sumCancel').addEventListener('click', function () { hideSumList(); inputEl.focus(); });
 
   $('prevMonth').addEventListener('click', function () { if (view === 'week') cursor = addDays(startOfWeek(cursor), -7); else cursor = addMonths(cursor, -1); renderAll(); });
   $('nextMonth').addEventListener('click', function () { if (view === 'week') cursor = addDays(startOfWeek(cursor), 7); else cursor = addMonths(cursor, 1); renderAll(); });
