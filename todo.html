@@ -211,6 +211,9 @@
     font-size:11.5px;font-weight:650;color:var(--accent);
     background:var(--accent-soft);border-radius:7px;padding:4px 9px;margin:-2px 0 8px 2px;
     align-self:flex-start;
+    /* 固定最小高度：带按钮的「拆成待办」比纯文字高 6px，
+       不加这条的话，内容一换（拆成待办 → 正在整理…）下面的日历就跳 6px */
+    min-height:29px;box-sizing:border-box;
   }
   .parse-hint b{font-weight:750;}
   .parse-hint .ph-x{cursor:pointer;color:var(--text-dim);font-weight:700;padding:0 2px;}
@@ -947,7 +950,6 @@
         <div class="parse-hint hidden" id="parseHint"></div>
 
         <div class="sum-list hidden" id="sumList">
-          <div class="sum-head">🤖 这段话里有 <b id="sumCount">2</b> 件事，拆成这些待办：</div>
           <div id="sumRows"></div>
           <div class="sum-foot">
             <button type="button" id="sumCancel">取消</button>
@@ -3012,12 +3014,15 @@
 
   function showSummarizeChip(raw) {
     parseHintEl.textContent = '';
+    /* 已经拆过一次、只是把面板关了：按钮直接改成"打开拆分结果"，
+       再点不会重新问 AI，也不用用户把字删了重打 */
+    var cached = !!(_sumCache && _sumCache.raw === raw);
     var tip = document.createElement('span');
-    tip.textContent = '这段话里有几件事，可以让 AI 拆成待办　';
+    tip.textContent = cached ? '这段原文已经拆过，结果还在　' : '这段话里有几件事，可以让 AI 拆成待办　';
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'ph-ai';
-    btn.textContent = '🤖 提炼成待办';
+    btn.textContent = cached ? '🤖 打开拆分结果' : '🤖 拆成待办';
     btn.addEventListener('click', function (e) {
       e.stopPropagation(); e.preventDefault();
       runSummarize(raw);
@@ -3052,12 +3057,20 @@
   }
 
   /* ---------- 一段话拆成多条：先列出来让人确认，再一次性建 ---------- */
-  var _sumTasks = [];
+  /* _sumCache 记住「这段原文拆出来的结果」：面板被关掉后再点一次入口，
+     直接拿回来，不用重新调 AI，也不用用户把字删了重打 */
+  var _sumTasks = [], _sumCache = null;
   function sumListOpen() { var el = $('sumList'); return !!el && !el.classList.contains('hidden'); }
-  function hideSumList() { _sumTasks = []; var el = $('sumList'); if (el) el.classList.add('hidden'); }
+  function hideSumList() {
+    _sumTasks = [];
+    var el = $('sumList'); if (el) el.classList.add('hidden');
+  }
   function showSumList(list) {
     _sumTasks = list.slice();
-    parseHintEl.classList.add('hidden');
+    /* 提示条不能藏（一藏日历就上移几像素），改成一句状态说明，
+       既不空着一条透明带，也让浮层有个贴靠的位置 */
+    parseHintEl.textContent = '🤖 已拆出 ' + _sumTasks.length + ' 条待办，删改后点「全部添加」';
+    parseHintEl.classList.remove('hidden');
     renderSumList();
     $('sumList').classList.remove('hidden');
     placeSumList();
@@ -3068,12 +3081,14 @@
     var el = $('sumList'), host = el.offsetParent;
     if (!host || !sumListOpen()) return;
     var c = formEl.getBoundingClientRect(), h = host.getBoundingClientRect();
+    var anchor = $('parseHint');
+    var aRect = (!anchor.classList.contains('hidden')) ? anchor.getBoundingClientRect() : c;
     var left = Math.max(0, c.left - h.left);
     var avail = h.width - left - 16;           // 内容区右内边距 16
     var width = c.width <= avail ? c.width : Math.max(220, avail);
     el.style.left = left + 'px';
     el.style.width = width + 'px';
-    el.style.top = (c.bottom - h.top + 6) + 'px';
+    el.style.top = (aRect.bottom - h.top + 6) + 'px';
   }
   function renderSumList() {
     var box = $('sumRows'); box.innerHTML = '';
@@ -3101,7 +3116,9 @@
       row.appendChild(tx); row.appendChild(wh); row.appendChild(del);
       box.appendChild(row);
     });
-    $('sumCount').textContent = _sumTasks.length;
+    /* 删掉某条后状态行上的条数要跟着变 */
+    var cnt = $('sumCount'); if (cnt) cnt.textContent = _sumTasks.length;
+    if (sumListOpen()) parseHintEl.textContent = '🤖 已拆出 ' + _sumTasks.length + ' 条待办，删改后点「全部添加」';
   }
   function addSumAll() {
     if (!_sumTasks.length) return;
@@ -3115,6 +3132,7 @@
       if (last) ids.push(last.id);
     });
     hideSumList();
+    _sumCache = null;               // 已经建成任务了，缓存没用
     inputEl.value = '';
     autoDate = true; dateTouched = false; parseHintEl.classList.add('hidden');
     /* 批量建待办最容易误操作，给个一次撤销整批的入口 */
@@ -3128,6 +3146,8 @@
   function runSummarize(raw) {
     if (_aiSumBusy) return;
     if (inputEl.value.trim() !== raw) return;
+    /* 同一段原文之前拆过、只是把面板关了 → 直接还原，不再花一次 token */
+    if (_sumCache && _sumCache.raw === raw) { showSumList(_sumCache.list); return; }
     _aiSumBusy = true;
     parseHintEl.textContent = '🤖 正在整理…';
     parseHintEl.classList.remove('hidden');
@@ -3142,7 +3162,7 @@
       if (inputEl.value.trim() !== raw) return;      // 提炼期间用户又改了，别覆盖
       var list = parseAiTasksJson(r.text);
       if (!list) { showAiDateHint('AI 没能提炼出待办，可以直接用原文保存'); return; }
-      if (list.length > 1) { showSumList(list); return; }   // 几件事就列几条，让人确认
+      if (list.length > 1) { _sumCache = { raw: raw, list: list }; showSumList(list); return; }   // 几件事就列几条，让人确认
       var o = list[0];
       inputEl.value = o.text;
       if (o.start) { startEl.value = o.start; endEl.value = o.end || o.start; }
@@ -3497,6 +3517,7 @@
   }
   inputEl.addEventListener('input', function () {
     if (sumListOpen()) hideSumList();     // 用户在改原文了，之前那份拆分结果就过期了
+    _sumCache = null;
     updateParseHint(); scheduleAiParse();
   });
 
@@ -3531,7 +3552,7 @@
   endEl.addEventListener('change', function () { dateTouched = true; if (!endEl.value) endEl.value = startEl.value || fmt(TODAY); if (startEl.value && endEl.value < startEl.value) endEl.value = startEl.value; });
 
   $('sumAll').addEventListener('click', addSumAll);
-  $('sumCancel').addEventListener('click', function () { hideSumList(); inputEl.focus(); });
+  $('sumCancel').addEventListener('click', function () { hideSumList(); updateParseHint(); inputEl.focus(); });
 
   /* 浮层是盖上去的，点别处就该收起来，不然会一直挡着日历 */
   document.addEventListener('click', function (e) {
@@ -3539,6 +3560,7 @@
     var t = e.target;
     if (t && t.closest && (t.closest('#sumList') || t.closest('#form'))) return;
     hideSumList();
+    updateParseHint();      // 关掉后「拆成待办」入口要回来，别逼用户删字重打
   });
   window.addEventListener('resize', function () { if (sumListOpen()) placeSumList(); });
 
@@ -3741,7 +3763,7 @@
 
   document.addEventListener('keydown', function (e) {
     var inField = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''));
-    if (e.key === 'Escape') { if (sumListOpen()) { hideSumList(); return; } if (!modalMask.classList.contains('hidden')) closeEditor(); else if (!trashMask.classList.contains('hidden')) trashMask.classList.add('hidden'); else if (!repMask.classList.contains('hidden')) closeReport(); else if (!$('aiMask').classList.contains('hidden')) $('aiMask').classList.add('hidden'); moreMenu.classList.add('hidden'); hideToast(); return; }
+    if (e.key === 'Escape') { if (sumListOpen()) { hideSumList(); updateParseHint(); return; } if (!modalMask.classList.contains('hidden')) closeEditor(); else if (!trashMask.classList.contains('hidden')) trashMask.classList.add('hidden'); else if (!repMask.classList.contains('hidden')) closeReport(); else if (!$('aiMask').classList.contains('hidden')) $('aiMask').classList.add('hidden'); moreMenu.classList.add('hidden'); hideToast(); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) { e.preventDefault(); openReport('day', true); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'W' || e.key === 'w')) { e.preventDefault(); openReport('week', true); return; }
     if (!modalMask.classList.contains('hidden') || !trashMask.classList.contains('hidden') || !repMask.classList.contains('hidden') || inField) return;

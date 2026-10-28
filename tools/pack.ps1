@@ -61,7 +61,13 @@ if ($NoDeploy) {
     Start-Sleep -Milliseconds 800
   }
 
-  Copy-Item $srcExe $target -Force
+  # 刚停掉的进程有时还攥着句柄几百毫秒，硬拷会报『正由另一进程使用』
+  $copied = $false
+  for ($i = 1; $i -le 10; $i++) {
+    try { Copy-Item $srcExe $target -Force -ErrorAction Stop; $copied = $true; break }
+    catch { Start-Sleep -Milliseconds 500 }
+  }
+  if (-not $copied) { throw "部署失败：$target 被占用，请先手动退出日历待办再重跑" }
   Copy-Item 'docs\使用说明.txt' (Join-Path $InstallDir '使用说明.txt') -Force
 
   $h1 = (Get-FileHash $srcExe -Algorithm SHA256).Hash
