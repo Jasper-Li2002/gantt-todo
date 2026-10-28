@@ -659,9 +659,16 @@
   }
   .parse-hint .ph-ai:hover{filter:brightness(1.08);}
 
-  /* 提炼出多条时的确认列表：一段话里有几件事，逐条摊开，
-     确认后一次性建，省得一条条复制粘贴 */
-  .sum-list{margin-top:8px;padding:10px 12px 9px;border:1px solid var(--line2);border-radius:10px;background:var(--panel);}
+  /* 提炼出多条时的确认浮层：一段话里有几件事，逐条摊开，确认后一次性建。
+     必须脱离布局流（absolute）——早先放在流里，展开时会把日历整体往下顶，
+     窗口看着像被撑大了。现在浮在输入框下面，盖住工具栏，关掉就恢复原样。 */
+  .sum-list{
+    position:absolute;z-index:60;
+    margin:0;padding:10px 12px 9px;border:1px solid var(--line2);border-radius:12px;
+    background:var(--card);
+    box-shadow:0 16px 40px rgba(20,26,45,.18),0 2px 7px rgba(20,26,45,.08);
+    max-height:min(46vh,320px);overflow-y:auto;
+  }
   .sum-head{font-size:12.5px;color:var(--text-dim);margin-bottom:6px;}
   .sum-head b{color:var(--accent);font-weight:750;}
   .sum-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;}
@@ -3053,6 +3060,20 @@
     parseHintEl.classList.add('hidden');
     renderSumList();
     $('sumList').classList.remove('hidden');
+    placeSumList();
+  }
+  /* 浮层贴在输入框下沿：宽度对齐输入框，位置按当前布局算。
+     用绝对定位是为了不把日历顶下去——之前展开一次，整个页面就变高了。 */
+  function placeSumList() {
+    var el = $('sumList'), host = el.offsetParent;
+    if (!host || !sumListOpen()) return;
+    var c = formEl.getBoundingClientRect(), h = host.getBoundingClientRect();
+    var left = Math.max(0, c.left - h.left);
+    var avail = h.width - left - 16;           // 内容区右内边距 16
+    var width = c.width <= avail ? c.width : Math.max(220, avail);
+    el.style.left = left + 'px';
+    el.style.width = width + 'px';
+    el.style.top = (c.bottom - h.top + 6) + 'px';
   }
   function renderSumList() {
     var box = $('sumRows'); box.innerHTML = '';
@@ -3512,6 +3533,15 @@
   $('sumAll').addEventListener('click', addSumAll);
   $('sumCancel').addEventListener('click', function () { hideSumList(); inputEl.focus(); });
 
+  /* 浮层是盖上去的，点别处就该收起来，不然会一直挡着日历 */
+  document.addEventListener('click', function (e) {
+    if (!sumListOpen()) return;
+    var t = e.target;
+    if (t && t.closest && (t.closest('#sumList') || t.closest('#form'))) return;
+    hideSumList();
+  });
+  window.addEventListener('resize', function () { if (sumListOpen()) placeSumList(); });
+
   $('prevMonth').addEventListener('click', function () { if (view === 'week') cursor = addDays(startOfWeek(cursor), -7); else cursor = addMonths(cursor, -1); renderAll(); });
   $('nextMonth').addEventListener('click', function () { if (view === 'week') cursor = addDays(startOfWeek(cursor), 7); else cursor = addMonths(cursor, 1); renderAll(); });
   $('todayBtn').addEventListener('click', function () { cursor = new Date(TODAY.getTime()); renderAll(); });
@@ -3711,7 +3741,7 @@
 
   document.addEventListener('keydown', function (e) {
     var inField = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''));
-    if (e.key === 'Escape') { if (!modalMask.classList.contains('hidden')) closeEditor(); else if (!trashMask.classList.contains('hidden')) trashMask.classList.add('hidden'); else if (!repMask.classList.contains('hidden')) closeReport(); else if (!$('aiMask').classList.contains('hidden')) $('aiMask').classList.add('hidden'); moreMenu.classList.add('hidden'); hideToast(); return; }
+    if (e.key === 'Escape') { if (sumListOpen()) { hideSumList(); return; } if (!modalMask.classList.contains('hidden')) closeEditor(); else if (!trashMask.classList.contains('hidden')) trashMask.classList.add('hidden'); else if (!repMask.classList.contains('hidden')) closeReport(); else if (!$('aiMask').classList.contains('hidden')) $('aiMask').classList.add('hidden'); moreMenu.classList.add('hidden'); hideToast(); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd')) { e.preventDefault(); openReport('day', true); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'W' || e.key === 'w')) { e.preventDefault(); openReport('week', true); return; }
     if (!modalMask.classList.contains('hidden') || !trashMask.classList.contains('hidden') || !repMask.classList.contains('hidden') || inField) return;
