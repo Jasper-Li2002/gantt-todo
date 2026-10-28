@@ -2223,6 +2223,16 @@
       try { el.releasePointerCapture(e.pointerId); } catch (err) { }
     });
     el.addEventListener('pointercancel', function () { dragging = false; });
+
+    /* 点面板外面的任何地方都收起色轮。
+       以前只能再点一次那个彩虹按钮，看着像卡住了，用户不知道该怎么关。 */
+    document.addEventListener('click', function (e) {
+      var pop = $('mWheelPop');
+      if (!pop || !pop.classList.contains('on')) return;
+      var t = e.target;
+      if (t && t.closest && (t.closest('#mWheelPop') || t.closest('.wheelbtn'))) return;
+      pop.classList.remove('on');
+    });
   })();
 
   /* 新建时选「高优先级」，颜色默认落到红色；已经手动挑过色就不动 */
@@ -2876,9 +2886,11 @@
     function consume(tok) { s = s.split(tok).join(''); }
     var rel = [['大后天', 3], ['后天', 2], ['明天', 1], ['明日', 1], ['今天', 0], ['今日', 0], ['昨天', -1]];
     for (var i = 0; i < rel.length; i++) { if (s.indexOf(rel[i][0]) >= 0) { var d = addDays(TODAY, rel[i][1]); if (!start) { start = d; end = d; } consume(rel[i][0]); } }
-    var wm = s.match(/(下?)(?:周|星期|礼拜)([一二三四五六日天])/);
+    /* 「下周2」「周三」「礼拜日」都要能认：以前只写了中文星期，
+       用户打「下周2」就落到 AI 那条路，标题里的时间词也就没人剪 */
+    var wm = s.match(/(下?)(?:周|星期|礼拜)([一二三四五六日天1-7])/);
     if (wm) {
-      var wMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 };
+      var wMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 0 };
       var wd = wMap[wm[2]]; var base = startOfWeek(TODAY); var target = base;
       for (var k = 0; k < 7; k++) { if (target.getDay() === wd) break; target = addDays(target, 1); }
       var off = wm[1] ? 7 : 0; var d2 = addDays(target, off);
@@ -2897,19 +2909,27 @@
     return { text: s, start: fmt(start), end: fmt(end) };
   }
 
-  /* ---------- AI 识别日期（只填日期，绝不改标题） ---------- */
-  /* 这个提示词的重点是"只回 JSON"：早期做法让模型返回整条待办，
-     结果它顺手把原文改写成一句通顺的话，标题就不是用户写的那句了。
-     现在模型只许吐两个日期，标题永远走用户输入的原文。 */
+  /* ---------- AI 识别日期（日期 + 剪掉时间词，其余一字不改） ---------- */
+  /* 两条硬约束，都是踩过的坑：
+     1. 以前让模型返回整条待办，它顺手把原文改写成一句通顺的话，标题就不是用户写的那句了。
+     2. 后来只回日期，标题原样保留，结果「下周2我想吃大闸蟹」建出来还是带着「下周2」。
+     现在只允许它做「删除时间表达」这一件事，并校验剪完的句子必须是原文的子序列，
+     改了一个字就作废、退回原句，宁可多个时间词也不接受改写。 */
   var AI_DATE_PROMPT = [
-    '你是日期解析器。输入是一句中文待办，把里面的时间信息解析成起止日期。',
-    '只输出一行 JSON，不要解释、不要 Markdown 代码块、不要复述原文、不要给建议：',
-    '{"start":"YYYY-MM-DD","end":"YYYY-MM-DD"}',
+    '你把一句中文待办里的时间信息解析成日期，并把时间词从原句里剪掉。',
+    '只输出一行 JSON，不要解释、不要 Markdown 代码块：',
+    '{"start":"YYYY-MM-DD","end":"YYYY-MM-DD","text":"..."}',
     '规则：',
-    '1. 只有一天时 start 与 end 相同。',
-    '2. 完全看不出时间，就输出 {"start":"","end":""}。',
-    '3. 相对说法（明天、下周三、月底前、两周内、国庆后）按给定的今天推算。',
-    '4. 拿不准宁可留空，不要编日期。'
+    '1. text 只能由原句删掉时间表达得到，剩下的每个字必须和原文完全一样，顺序不变。',
+    '2. 严禁改写措辞、严禁补全句子、严禁添加「记录」「安排」「处理」「跟进」「提醒」这类原文没有的动词。',
+    '3. 只删时间表达本身（下周2、下周二、月底前、两周内、10月30日、国庆后），不要连带动词或宾语。',
+    '4. 删完为空就返回空字符串。',
+    '5. 只有一天时 start 与 end 相同。',
+    '6. 完全看不出时间，就输出 {"start":"","end":"","text":""}。',
+    '7. 相对说法按给定的今天推算。',
+    '8. 拿不准宁可留空，不要编日期。',
+    '示例：输入「下周二帮我问一下服务器扩容的报价」',
+    '输出：{"start":"2026-11-03","end":"2026-11-03","text":"帮我问一下服务器扩容的报价"}'
   ].join('\n');
 
   /* ---------- AI 把一整段话提炼成一条待办 ---------- */
@@ -2926,7 +2946,12 @@
     '3. 保留原文里的关键对象（人名、系统名、文档名），不许编造原文没有的内容。',
     '4. 原文没提时间就把 start 和 end 都留空字符串。',
     '5. 只解析明确的时间表达（明天／下周三／10月30日／月底前／两周内）。',
-    '6. 看不出重点就取最靠前的一个具体动作。'
+    '6. 看不出重点就取最靠前的一个具体动作。',
+    /* 下面两条是用户反馈出来的：原文「下周2我想吃大闸蟹」被提炼成
+       「下周2记录我想吃大闸蟹」——既没剪掉时间，又多塞了一个空动词 */
+    '7. text 里不要出现任何时间词，时间只放 start/end。',
+    '8. 原文已经说清了做什么（我想吃大闸蟹、把方案发老板），就照原文的说法写；',
+    '   严禁加「记录」「安排」「处理」「跟进」这类原文没有的空动词，也不要把它改成公文腔。'
   ].join('\n');
 
   var _aiSumBusy = false;
@@ -3031,7 +3056,7 @@
       }
     }).then(function (r) {
       _aiDateBusy = false;
-      var g = parseAiDateJson(r.text);
+      var g = parseAiDateJson(r.text, raw);
       _aiDateCache[raw] = g;
       applyAiDate(raw, g);
     }).catch(function (e) {
@@ -3041,7 +3066,17 @@
   }
 
   /* 从模型返回里夹出第一个 JSON 对象，容错到"前面多说了两句"也能用 */
-  function parseAiDateJson(txt) {
+  /* 剪完的句子必须是原句的子序列：AI 只要动了一个字、换了个词序，就不认这个结果。
+     宁可留着时间词让用户自己删，也不能让标题被悄悄改写。 */
+  function isSubseq(small, big) {
+    var i = 0;
+    for (var j = 0; j < big.length && i < small.length; j++) {
+      if (big.charAt(j) === small.charAt(i)) i++;
+    }
+    return i === small.length;
+  }
+
+  function parseAiDateJson(txt, raw) {
     var m = String(txt || '').match(/\{[\s\S]*\}/);
     if (!m) return null;
     try {
@@ -3051,17 +3086,29 @@
       var en = okDate.test(o.end || '') ? o.end : st;
       if (!st) return null;
       if (en < st) en = st;
-      return { start: st, end: en };
+      /* text 只在通过子序列校验时采用，否则当作空 */
+      var src = String(raw || '');
+      var cand = [String(o.text || '').replace(/\s+/g, ' ').trim(), String(o.text || '').trim()];
+      var clean = '';
+      for (var k = 0; k < cand.length; k++) {
+        if (cand[k] && isSubseq(cand[k], src)) { clean = cand[k]; break; }
+      }
+      return { start: st, end: en, text: clean };
     } catch (e) { return null; }
   }
 
   function applyAiDate(raw, g) {
     if (inputEl.value.trim() !== raw) return;    // 用户又改了输入，别把旧结果填进去
     if (!g) { showAiDateHint('🤖 没从这句话里看出日期，按右侧日期创建'); return; }
-    startEl.value = g.start; endEl.value = g.end;
-    var n = diffDays(parse(g.start), parse(g.end)) + 1;
-    showAiDateHint('🤖 识别到 ' + md(parse(g.start)) + (n > 1 ? ' → ' + md(parse(g.end)) + '（' + n + ' 天）' : '') +
-      '　标题仍是你写的原话');
+    /* 用户自己动过日期框就以手动值为准 */
+    var s2 = dateTouched ? (startEl.value || g.start) : g.start;
+    var e2 = dateTouched ? (endEl.value || g.end) : g.end;
+    startEl.value = s2; endEl.value = e2;
+    var n = diffDays(parse(s2), parse(e2)) + 1;
+    var when = md(parse(s2)) + (n > 1 ? ' → ' + md(parse(e2)) + '（' + n + ' 天）' : '');
+    /* 输入框不回写：用户还在敲字，框里内容自己变了会以为程序出错。
+       剪掉时间词后的标题在这里摊开给用户看，提交时按它建。 */
+    showAiDateHint('🤖 识别到 ' + when + '　标题：' + (g.text && g.text !== raw ? g.text : raw));
   }
 
   /* ---------- 日历拖拽新建 ---------- */
@@ -3289,12 +3336,15 @@
   }
 
   /* ---------- 事件 ---------- */
-  var autoDate = true, parseHintEl = $('parseHint');
+  var autoDate = true, dateTouched = false, parseHintEl = $('parseHint');
   function setParseHint(pq) {
     parseHintEl.textContent = '';
     if (!autoDate || !pq) { parseHintEl.classList.add('hidden'); return; }
     var t = parse(pq.start), e = parse(pq.end), span = diffDays(t, e);
     var label = span > 0 ? md(t) + ' → ' + md(e) + '（' + (span + 1) + ' 天）' : md(t);
+    /* 提示条说「识别到 11/3」，右边的日期框却还停在今天，看着像没生效。
+       用户自己动过日期框就不再覆盖（dateTouched），以手动为准。 */
+    if (!dateTouched) { startEl.value = pq.start; endEl.value = pq.end; }
     parseHintEl.textContent = '📅 识别到 ' + label + '　标题：' + (pq.text || '原样');
     var x = document.createElement('span'); x.className = 'ph-x'; x.textContent = '✕'; x.title = '不要自动识别日期，按右侧日期创建';
     x.addEventListener('click', function (ev) { ev.stopPropagation(); autoDate = false; parseHintEl.classList.add('hidden'); inputEl.focus(); });
@@ -3318,16 +3368,28 @@
     var raw = inputEl.value.trim(); if (!raw) { formEl.classList.remove('shake'); void formEl.offsetWidth; formEl.classList.add('shake'); inputEl.focus(); return; }
     var pq = autoDate ? (looksLong(raw) ? null : parseQuick(raw)) : null;
     var text, s, en;
-    if (pq) { text = pq.text || raw; s = pq.start; en = pq.end; }
-    else { text = raw; s = startEl.value; en = endEl.value; }
+    if (pq) {
+      text = pq.text || raw;
+      /* 用户动过日期框就以手动值为准，没动过才用识别结果 */
+      s = dateTouched ? (startEl.value || pq.start) : pq.start;
+      en = dateTouched ? (endEl.value || pq.end) : pq.end;
+      if (en < s) en = s;
+    }
+    else {
+      /* 本地识别不出、靠 AI 认的日期：标题要用 AI 剪掉时间词的那版，
+         否则「下周2我想吃大闸蟹」建出来还是带着「下周2」 */
+      var ai = (autoDate && _aiDateCache[raw]) ? _aiDateCache[raw] : null;
+      text = (ai && ai.text) ? ai.text : raw;
+      s = startEl.value; en = endEl.value;
+    }
     add(text, s, en);
     inputEl.value = '';
-    autoDate = true; parseHintEl.classList.add('hidden');
+    autoDate = true; dateTouched = false; parseHintEl.classList.add('hidden');
     var base = parse(en) || TODAY; startEl.value = fmt(base); endEl.value = fmt(base); inputEl.focus();
   });
 
-  startEl.addEventListener('change', function () { if (!startEl.value) startEl.value = fmt(TODAY); if (!endEl.value || endEl.value < startEl.value) endEl.value = startEl.value; });
-  endEl.addEventListener('change', function () { if (!endEl.value) endEl.value = startEl.value || fmt(TODAY); if (startEl.value && endEl.value < startEl.value) endEl.value = startEl.value; });
+  startEl.addEventListener('change', function () { dateTouched = true; if (!startEl.value) startEl.value = fmt(TODAY); if (!endEl.value || endEl.value < startEl.value) endEl.value = startEl.value; });
+  endEl.addEventListener('change', function () { dateTouched = true; if (!endEl.value) endEl.value = startEl.value || fmt(TODAY); if (startEl.value && endEl.value < startEl.value) endEl.value = startEl.value; });
 
   $('prevMonth').addEventListener('click', function () { if (view === 'week') cursor = addDays(startOfWeek(cursor), -7); else cursor = addMonths(cursor, -1); renderAll(); });
   $('nextMonth').addEventListener('click', function () { if (view === 'week') cursor = addDays(startOfWeek(cursor), 7); else cursor = addMonths(cursor, 1); renderAll(); });
