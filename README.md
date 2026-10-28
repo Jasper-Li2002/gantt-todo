@@ -11,7 +11,7 @@ Windows 桌面待办 / 排期工具。WinForms 外壳 + WebView2 承载单页前
 ## 仓库
 
 - 远端：`https://github.com/Jasper-Li2002/gantt-todo`（私有）
-- 主分支 `main`，版本以 tag 标记（当前 `v2.6.0`）
+- 主分支 `main`，版本以 tag 标记（当前 `v2.6.9`）
 - 推 tag 自动触发 `.github/workflows/release.yml` 出包并发 Release
 
 ## 目录结构
