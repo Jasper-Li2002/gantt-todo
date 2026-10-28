@@ -612,16 +612,52 @@
   .field textarea{resize:vertical;min-height:56px;}
   .row2{display:flex;gap:9px;}
   .row2 .field{flex:1;}
-  .swatches{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+  /* 色板：只放常用的 8 个色 + 一个色轮按钮，宽度收在原字段宽度内，
+     不再像之前 12 个色块那样横着顶到「标签」那一列去 */
+  .swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
   .swatch{
-    position:relative;width:27px;height:27px;border-radius:8px;cursor:pointer;
-    border:2px solid transparent;transition:.14s;background:var(--panel);
+    position:relative;box-sizing:border-box;width:22px;height:22px;border-radius:6px;cursor:pointer;
+    border:1.5px solid transparent;transition:transform .14s,box-shadow .14s;background:var(--panel);
     display:flex;align-items:center;justify-content:center;
-    font-size:13px;font-weight:800;color:var(--muted);line-height:1;
+    font-size:12px;font-weight:800;color:var(--muted);line-height:1;
   }
-  .swatch.on{border-color:var(--text);transform:scale(1.06);}
-  .swatch.custom{box-shadow:inset 0 0 0 1.5px var(--line2);}
-  .swatch.custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;}
+  .swatch.on{border-color:var(--text);transform:scale(1.15);}
+  /* 色轮按钮：一个小的彩虹方块，点了展开下面的调色盘。
+     类名用 wheelbtn 而不是 wheel —— 面板里那个 150px 的圆叫 .wheel，
+     同名会把按钮撑成一个大圆盘（这个项目以前在 .mini 上栽过一次）。 */
+  .swatch.wheelbtn{
+    background:conic-gradient(from 90deg,#f43f5e,#f59e0b,#84cc16,#06b6d4,#6366f1,#d946ef,#f43f5e);
+    box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.62),0 0 0 1px var(--line2);
+  }
+  .swatch.wheelbtn.on{box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.62),0 0 0 1.5px var(--text);}
+  .swatch.wheelbtn.on::after{content:'';position:absolute;inset:5px;border-radius:3px;background:var(--panel);opacity:.92;}
+
+  /* 调色盘：色相绕圆周、饱和度由中心向外，拖动取色 */
+  .wheel-pop{display:none;margin-top:9px;padding:13px 15px;border:1px solid var(--line2);border-radius:10px;background:var(--panel);gap:16px;align-items:center;}
+  /* 宽度跟着内容走，不要撑满整行留一大片空 */
+  .wheel-pop.on{display:flex;width:fit-content;max-width:100%;}
+  .wheel{
+    position:relative;flex:0 0 auto;width:150px;height:150px;border-radius:50%;cursor:crosshair;touch-action:none;
+    background:
+      radial-gradient(circle closest-side,#ffffff 0%,rgba(255,255,255,.92) 18%,rgba(255,255,255,0) 100%),
+      conic-gradient(from 90deg,#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000);
+    box-shadow:inset 0 0 0 1px rgba(20,26,45,.12),0 2px 10px rgba(20,26,45,.12);
+  }
+  .wheel-cursor{
+    position:absolute;width:15px;height:15px;border-radius:50%;pointer-events:none;
+    border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 1px 5px rgba(0,0,0,.35);
+    transform:translate(-50%,-50%);
+  }
+  .wheel-side{flex:0 0 auto;width:186px;}
+  .wheel-prev{width:52px;height:52px;border-radius:12px;box-shadow:inset 0 0 0 1px rgba(20,26,45,.14);}
+  .wheel-hex{margin-top:8px;font-size:12.5px;font-weight:750;color:var(--text-dim);letter-spacing:.6px;font-variant-numeric:tabular-nums;}
+  .wheel-tip{margin-top:8px;font-size:11px;line-height:1.7;color:var(--muted);}
+  .wheel-tip b{font-weight:700;color:var(--text-dim);}
+  .parse-hint .ph-ai{
+    font:inherit;font-size:11.5px;font-weight:700;color:#fff;background:var(--accent);
+    border:none;border-radius:6px;padding:3px 10px;cursor:pointer;margin-left:2px;transition:filter .14s;
+  }
+  .parse-hint .ph-ai:hover{filter:brightness(1.08);}
   .progress-row{display:flex;align-items:center;gap:9px;}
   .progress-row input[type=range]{flex:1;accent-color:var(--accent);}
   .progress-val{font-size:12px;font-weight:700;min-width:38px;text-align:right;color:var(--accent);font-variant-numeric:tabular-nums;}
@@ -1035,6 +1071,14 @@
     <div class="field">
       <label>颜色</label>
       <div class="swatches" id="mSwatches"></div>
+      <div class="wheel-pop" id="mWheelPop">
+        <div class="wheel" id="mWheel"><span class="wheel-cursor" id="mWheelCursor"></span></div>
+        <div class="wheel-side">
+          <div class="wheel-prev" id="mWheelPrev"></div>
+          <div class="wheel-hex" id="mWheelHex">#4361EE</div>
+          <div class="wheel-tip">按住圆盘拖动取色<br><b>越靠中心越浅</b>，越靠边缘越浓</div>
+        </div>
+      </div>
     </div>
     <div class="row2">
       <div class="field">
@@ -1245,6 +1289,30 @@
     return rgbHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t);
   }
   function isHexColor(c) { return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c); }
+  /* 色轮用 HSV：色相绕圆周（0° 在 3 点钟方向、顺时针），饱和度由圆心向外 */
+  function hexToHs(hex) {
+    var c = hexRgb(hex);
+    var r = c[0] / 255, g = c[1] / 255, b = c[2] / 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, h = 0;
+    if (d > 0) {
+      if (mx === r) h = ((g - b) / d) % 6;
+      else if (mx === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60; if (h < 0) h += 360;
+    }
+    return { h: h, s: mx ? d / mx : 0 };
+  }
+  function hsv2hex(h, s) {
+    var c = s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = 1 - c;
+    var r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    return rgbHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
+  }
   /* 下标则返回 0~11，自定义色返回 null */
   function palIndex(c) {
     if (typeof c === 'number' && isFinite(c)) return ((Math.round(c) % PALETTE.length) + PALETTE.length) % PALETTE.length;
@@ -2059,6 +2127,7 @@
     $('mTags').value = t ? (t.tags || []).join(', ') : '';
     $('mProgress').value = t ? t.progress : 0; $('mProgressVal').textContent = (t ? t.progress : 0) + '%';
     $('mNote').value = t ? t.note : '';
+    $('mWheelPop').classList.remove('on');
     renderSwatches(); renderDeps(t);
     $('mDelete').classList.toggle('hidden', !t);
     $('mText').style.borderColor = '';
@@ -2066,41 +2135,96 @@
     setTimeout(function () { $('mText').focus(); }, 30);
   }
   function setStateSeg() { document.querySelectorAll('#mState button').forEach(function (b) { b.classList.toggle('on', (b.dataset.s === '1') === editingDone); }); }
+  var SWATCH_N = 8;   // 常用色只摆 8 个，剩下的交给色轮，避免色板横着顶到隔壁列
+
   function renderSwatches() {
     var box = $('mSwatches'); box.innerHTML = '';
-    var cur = editingColor;
-    var custom = isHexColor(cur);
-    var curHex = custom ? cur : PALETTE[palIndex(cur) === null ? 0 : palIndex(cur)].bd;
-    PALETTE.forEach(function (p, i) {
-      var s = document.createElement('div');
-      s.className = 'swatch' + (palIndex(cur) === i ? ' on' : '');
-      s.style.background = p.bg;
-      s.style.boxShadow = 'inset 0 0 0 2px ' + p.bd;
-      s.title = p.name;
-      s.addEventListener('click', function () { editingColor = i; colorTouched = true; renderSwatches(); });
-      box.appendChild(s);
+    var cur = editingColor, pi = palIndex(cur);
+    var list = [];
+    for (var i = 0; i < SWATCH_N; i++) list.push(i);
+    if (pi !== null && pi >= SWATCH_N) list.push(pi);   // 当前用的是非常用色，补一格免得看不见
+    list.forEach(function (i) {
+      var p = PALETTE[i];
+      var el = document.createElement('div');
+      el.className = 'swatch' + (pi === i ? ' on' : '');
+      el.style.background = p.bg;
+      el.style.boxShadow = 'inset 0 0 0 1.5px ' + p.bd;
+      el.title = p.name;
+      el.addEventListener('click', function () { editingColor = i; colorTouched = true; renderSwatches(); });
+      box.appendChild(el);
     });
-    /* 最后一格点开系统取色器，选什么用什么 */
-    var cw = document.createElement('label');
-    cw.className = 'swatch custom' + (custom ? ' on' : '');
-    cw.title = '自定义颜色';
-    if (custom) {
-      cw.style.background = mixHex(cur, '#ffffff', 0.88);
-      cw.style.boxShadow = 'inset 0 0 0 2px ' + cur;
-    } else { cw.textContent = '+'; }
-    var inp = document.createElement('input');
-    inp.type = 'color'; inp.value = curHex;
-    inp.addEventListener('input', function () {
-      editingColor = this.value; colorTouched = true;
-      /* 不能整块重建：重画会把正在打开的系统取色器关掉。这里只更新这一格 */
-      cw.style.background = mixHex(this.value, '#ffffff', 0.88);
-      cw.style.boxShadow = 'inset 0 0 0 2px ' + this.value;
-      cw.classList.add('on');
-      Array.prototype.forEach.call(box.children, function (el) { if (el !== cw) el.classList.remove('on'); });
+    /* 色轮按钮：当前色不是预设色时点亮，表示"这颜色是你自己调的" */
+    var wb = document.createElement('button');
+    wb.type = 'button';
+    wb.className = 'swatch wheelbtn' + (pi === null ? ' on' : '');
+    wb.title = '调色盘：自己选颜色';
+    wb.addEventListener('click', function (e) {
+      e.stopPropagation();
+      toggleWheel(!$('mWheelPop').classList.contains('on'));
     });
-    cw.appendChild(inp);
-    box.appendChild(cw);
+    box.appendChild(wb);
+    syncWheel(cur);
   }
+
+  function toggleWheel(on) {
+    $('mWheelPop').classList.toggle('on', !!on);
+    if (on) syncWheel(editingColor);
+  }
+
+  /* 把色轮指示器、预览块、色号同步到某个颜色 */
+  function syncWheel(c) {
+    var pi = palIndex(c);
+    var hex = isHexColor(c) ? c : (pi !== null ? PALETTE[pi].bd : '#4361ee');
+    var prev = $('mWheelPrev'), lab = $('mWheelHex'), dot = $('mWheelCursor');
+    if (prev) prev.style.background = hex;
+    if (lab) lab.textContent = String(hex).toUpperCase();
+    if (dot && $('mWheel')) {
+      var R = $('mWheel').clientWidth / 2;
+      if (R > 0) {
+        var hs = hexToHs(hex), rad = hs.h * Math.PI / 180, d = hs.s * R;
+        dot.style.left = (R + Math.cos(rad) * d) + 'px';
+        dot.style.top = (R + Math.sin(rad) * d) + 'px';
+      }
+    }
+  }
+
+  /* 色轮拖动取色：按下就取，拖到哪算哪 */
+  (function bindWheel() {
+    var el = $('mWheel');
+    if (!el) return;
+    var dragging = false;
+    function pick(e) {
+      var r = el.getBoundingClientRect();
+      var R = r.width / 2;
+      if (!(R > 0)) return;
+      var dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R);
+      var dist = Math.min(R, Math.sqrt(dx * dx + dy * dy));
+      var h = Math.atan2(dy, dx) * 180 / Math.PI;
+      if (h < 0) h += 360;
+      editingColor = hsv2hex(h, dist / R);
+      colorTouched = true;
+      /* 拖动过程中不重建色板：重建会让 pointer 事件断掉，光标就卡住了 */
+      var box = $('mSwatches');
+      Array.prototype.forEach.call(box.children, function (c) { c.classList.remove('on'); });
+      var wb = box.querySelector('.wheelbtn'); if (wb) wb.classList.add('on');
+      syncWheel(editingColor);
+    }
+    el.addEventListener('pointerdown', function (e) {
+      dragging = true;
+      try { el.setPointerCapture(e.pointerId); } catch (err) { }
+      pick(e); e.preventDefault();
+    });
+    el.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      pick(e); e.preventDefault();
+    });
+    el.addEventListener('pointerup', function (e) {
+      dragging = false;
+      try { el.releasePointerCapture(e.pointerId); } catch (err) { }
+    });
+    el.addEventListener('pointercancel', function () { dragging = false; });
+  })();
+
   /* 新建时选「高优先级」，颜色默认落到红色；已经手动挑过色就不动 */
   $('mPrio').addEventListener('change', function () {
     if (!editingId && !colorTouched && this.value === 'high') { editingColor = HIGH_COLOR; renderSwatches(); }
@@ -2788,6 +2912,89 @@
     '4. 拿不准宁可留空，不要编日期。'
   ].join('\n');
 
+  /* ---------- AI 把一整段话提炼成一条待办 ---------- */
+  /* 和上面"只识别日期"是两回事：那种情况标题必须原样保留。
+     这里用户主动点按钮，就是要 AI 把长文压缩成一句短标题，
+     所以提示词重点在"压缩"和"禁止复述原文"。 */
+  var AI_TASK_PROMPT = [
+    '你把用户给的一整段话压缩成一条可执行的待办。',
+    '只输出一行 JSON，不要解释、不要 Markdown 代码块、不要复述原文：',
+    '{"text":"...","start":"YYYY-MM-DD","end":"YYYY-MM-DD"}',
+    '要求：',
+    '1. text 是 8~22 字的动作短语，动词开头，说清做什么、交付什么。',
+    '2. 严禁出现「根据」「综上」「这段」「用户」「提到」「已为您」这类词，严禁把整段复述一遍。',
+    '3. 保留原文里的关键对象（人名、系统名、文档名），不许编造原文没有的内容。',
+    '4. 原文没提时间就把 start 和 end 都留空字符串。',
+    '5. 只解析明确的时间表达（明天／下周三／10月30日／月底前／两周内）。',
+    '6. 看不出重点就取最靠前的一个具体动作。'
+  ].join('\n');
+
+  var _aiSumBusy = false;
+
+  /* 判定"这段话值得提炼"：够长，或者是几句话说在一起 */
+  function looksLong(raw) {
+    return raw.length >= 18 || /[。；\n]/.test(raw);
+  }
+
+  function showSummarizeChip(raw) {
+    parseHintEl.textContent = '';
+    var tip = document.createElement('span');
+    tip.textContent = '这段话有点长，可以让 AI 提炼成一条待办　';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ph-ai';
+    btn.textContent = '🤖 提炼成待办';
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation(); e.preventDefault();
+      runSummarize(raw);
+    });
+    parseHintEl.appendChild(tip);
+    parseHintEl.appendChild(btn);
+    parseHintEl.classList.remove('hidden');
+  }
+
+  function parseAiTaskJson(txt) {
+    var m = String(txt || '').match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try {
+      var o = JSON.parse(m[0]);
+      var text = String(o.text || '').trim().replace(/^["'「『]/, '').replace(/["'」』]$/, '').trim();
+      if (!text) return null;
+      var okDate = /^\d{4}-\d{2}-\d{2}$/;
+      var st = okDate.test(o.start || '') ? o.start : '';
+      var en = okDate.test(o.end || '') ? o.end : st;
+      if (st && en && en < st) en = st;
+      return { text: text.slice(0, 60), start: st, end: en };
+    } catch (e) { return null; }
+  }
+
+  function runSummarize(raw) {
+    if (_aiSumBusy) return;
+    if (inputEl.value.trim() !== raw) return;
+    _aiSumBusy = true;
+    parseHintEl.textContent = '🤖 正在提炼…';
+    parseHintEl.classList.remove('hidden');
+    aiCall('gen', {
+      payload: {
+        system: AI_TASK_PROMPT,
+        user: '今天是 ' + fmt(TODAY) + '（' + WD[TODAY.getDay()] + '）。内容：\n' + raw,
+        temperature: 0.2
+      }
+    }).then(function (r) {
+      _aiSumBusy = false;
+      if (inputEl.value.trim() !== raw) return;      // 提炼期间用户又改了，别覆盖
+      var o = parseAiTaskJson(r.text);
+      if (!o) { showAiDateHint('AI 没能提炼出待办，可以直接用原文保存'); return; }
+      inputEl.value = o.text;
+      if (o.start) { startEl.value = o.start; endEl.value = o.end || o.start; }
+      var when = o.start ? (md(parse(o.start)) + (o.end && o.end !== o.start ? ' → ' + md(parse(o.end)) : '')) : '';
+      showAiDateHint('🤖 已提炼成「' + o.text + '」' + (when ? '　' + when : '') + '　可直接点添加，或再改改');
+    }).catch(function (e) {
+      _aiSumBusy = false;
+      showAiDateHint('AI 提炼失败：' + aiErrText(e));
+    });
+  }
+
   var aiReady = false, _aiDateTimer = null, _aiDateBusy = false, _aiDateFor = '', _aiDateCache = {};
 
   /* 启动时探一次有没有配 Key；没配就完全不打扰 */
@@ -2806,6 +3013,7 @@
     var raw = inputEl.value.trim();
     if (!raw || raw.length < 3 || !HAS_HOST || !aiReady) return;
     if (parseQuick(raw)) return;                 // 本地规则已经认出来了，不必花 token
+    if (looksLong(raw)) return;                  // 长文本交给「提炼成待办」按钮，别两套逻辑抢
     if (_aiDateCache.hasOwnProperty(raw)) { applyAiDate(raw, _aiDateCache[raw]); return; }
     if (_aiDateFor === raw) return;              // 这句问过了
     _aiDateTimer = setTimeout(function () { runAiParse(raw); }, 900);
@@ -3096,14 +3304,19 @@
   function updateParseHint() {
     var raw = inputEl.value.trim();
     if (!raw) { parseHintEl.classList.add('hidden'); return; }
-    setParseHint(parseQuick(raw));
+    /* 长文本先看能不能提炼：里面常带「今天」「这个月」这类词，
+       本地规则会抢先匹配出一个日期，把提炼入口挤掉 */
+    if (aiReady && looksLong(raw)) { showSummarizeChip(raw); return; }
+    var pq = parseQuick(raw);
+    if (pq) { setParseHint(pq); return; }
+    setParseHint(null);
   }
   inputEl.addEventListener('input', function () { updateParseHint(); scheduleAiParse(); });
 
   formEl.addEventListener('submit', function (e) {
     e.preventDefault();
     var raw = inputEl.value.trim(); if (!raw) { formEl.classList.remove('shake'); void formEl.offsetWidth; formEl.classList.add('shake'); inputEl.focus(); return; }
-    var pq = autoDate ? parseQuick(raw) : null;
+    var pq = autoDate ? (looksLong(raw) ? null : parseQuick(raw)) : null;
     var text, s, en;
     if (pq) { text = pq.text || raw; s = pq.start; en = pq.end; }
     else { text = raw; s = startEl.value; en = endEl.value; }
